@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>WebAssembly Example</title>
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go(); // Create a new Go instance
+
+        async function loadWasm() {
+            const response = await fetch('main.wasm');
+            const buffer = await response.arrayBuffer();
+            const { instance } = await WebAssembly.instantiate(buffer, go.importObject); // Use Go's import object
+
+            go.run(instance); // Run the Go instance
+            // Call your exported function from WebAssembly
+            let hiveGame = hive.createHiveGame();
+            console.dir(hiveGame);
+
+            hiveGame = hive.placeTile(hiveGame);
+            console.dir(hiveGame);
+        }
+
+        loadWasm();
+    </script>
+</head>
+<body>
+<h1>WebAssembly Example</h1>
+</body>
+</html>
