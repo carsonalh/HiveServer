@@ -16,6 +16,23 @@ func (v HexVectorInt) Subtract(u HexVectorInt) HexVectorInt {
 	return HexVectorInt{Q: v.Q - u.Q, R: v.R - u.R}
 }
 
+func (v HexVectorInt) AdjacentVectors() [6]HexVectorInt {
+	adjacentUnits := [6]HexVectorInt{
+		{1, 0},
+		{1, -1},
+		{0, -1},
+		{-1, 0},
+		{-1, 1},
+		{0, 1},
+	}
+
+	for i, u := range adjacentUnits {
+		adjacentUnits[i] = v.Add(u)
+	}
+
+	return adjacentUnits
+}
+
 func (m HexMatrixInt) Transform(v HexVectorInt) HexVectorInt {
 	return HexVectorInt{
 		Q: m.A00*v.Q + m.A01*v.R,
