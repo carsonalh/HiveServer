@@ -156,3 +156,65 @@ func TestFollowsAdjacencyRulesForPlacement(t *testing.T) {
 		t.Fatalf("A piece must be touching one if its own")
 	}
 }
+
+func TestMoveAntAroundTheHive(t *testing.T) {
+	canMove := func(from, to HexVectorInt) bool {
+		game := CreateHiveGame()
+
+		game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee)    // black
+		game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee)   // white
+		game.PlaceTile(HexVectorInt{1, 0}, PieceTypeSoldierAnt)  // black
+		game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeSoldierAnt) // white
+
+		return game.MoveTile(from, to)
+	}
+
+	blackAntLegalMoves := []HexVectorInt{
+		{1, -1},
+		{0, -1},
+		{-1, -1},
+		{-2, -1},
+		{-3, 0},
+		{-3, 1},
+		{-2, 1},
+		{-1, 1},
+		{0, 1},
+	}
+
+	blackAntPosition := HexVectorInt{1, 0}
+
+	for _, newPosition := range blackAntLegalMoves {
+		if !canMove(blackAntPosition, newPosition) {
+			t.Fatalf("Failed moving ant from %+v to %+v", blackAntPosition, newPosition)
+		}
+	}
+
+	blackAntIllegalMoves := []HexVectorInt{
+		blackAntPosition,
+		{3, 7},
+	}
+
+	for _, newPosition := range blackAntIllegalMoves {
+		if canMove(blackAntPosition, newPosition) {
+			t.Fatalf("Falsely allowed to move ant from %+v to %+v", blackAntPosition, newPosition)
+		}
+	}
+}
+
+func TestRespectsFreedomToMove(t *testing.T) {
+	game := CreateHiveGame()
+
+	// setup the space for an illegal freedom to move
+	game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee)
+	game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee)
+	game.PlaceTile(HexVectorInt{1, -1}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{-1, -1}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{1, -2}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeSoldierAnt)
+	game.PlaceTile(HexVectorInt{1, 0}, PieceTypeGrasshopper)
+
+	// try and pull off the illegal move violating freedom to move
+	if game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{0, -1}) {
+		t.Fatalf("Allowed ant to violate Freedom to Move")
+	}
+}
