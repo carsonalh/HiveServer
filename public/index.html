@@ -17,7 +17,8 @@
             let hiveGame = hive.createHiveGame();
             console.dir(hiveGame);
 
-            hiveGame = hive.placeTile(hiveGame);
+            hiveGame = hive.placeTile(hiveGame, hive.PIECE_TYPE_QUEEN_BEE, { q: 0, r: 0 });
+            hiveGame = hive.placeTile(hiveGame, hive.PIECE_TYPE_QUEEN_BEE, { q: -1, r: 0 });
             console.dir(hiveGame);
         }
 

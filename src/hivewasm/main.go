@@ -3,162 +3,49 @@
 package main
 
 import (
+	"HiveServer/src/hivegame"
 	"syscall/js"
 )
 
-type HexMatrixInt struct {
-	A00, A01, A10, A11 int
+var pieceTypeStrings = map[hivegame.HivePieceType]string{
+	hivegame.PieceTypeQueenBee:    "QUEEN_BEE",
+	hivegame.PieceTypeSoldierAnt:  "SOLDIER_ANT",
+	hivegame.PieceTypeGrasshopper: "GRASSHOPPER",
+	hivegame.PieceTypeSpider:      "SPIDER",
+	hivegame.PieceTypeBeetle:      "BEETLE",
+	hivegame.PieceTypeLadybug:     "LADYBUG",
+	hivegame.PieceTypeMosquito:    "MOSQUITO",
 }
 
-type HexVectorInt struct {
-	Q, R int
-}
-
-func (v HexVectorInt) Add(u HexVectorInt) HexVectorInt {
-	return HexVectorInt{Q: v.Q + u.Q, R: v.R + u.R}
-}
-
-func (tile *HiveTile) FromJsValue(value js.Value) bool {
-	if value.Type() != js.TypeObject {
-		return false
-	}
-
-	color, ok := HiveColorFromJsValue(value.Get("color"))
-	if !ok {
-		return false
-	}
-
-	pieceType, ok := HivePieceTypeFromJsValue(value.Get("pieceType"))
-	if !ok {
-		return false
-	}
-
-	ok = tile.position.FromJsValue(value.Get("position"))
-	if !ok {
-		return false
-	}
-
-	tile.color = color
-	tile.pieceType = pieceType
-
-	return true
-}
-
-func (v HexVectorInt) Subtract(u HexVectorInt) HexVectorInt {
-	return HexVectorInt{Q: v.Q - u.Q, R: v.R - u.R}
-}
-
-func (m HexMatrixInt) Transform(v HexVectorInt) HexVectorInt {
-	return HexVectorInt{
-		Q: m.A00*v.Q + m.A01*v.R,
-		R: m.A10*v.Q + m.A11*v.R,
-	}
-}
-
-type HiveColor = int
-
-const (
-	ColorBlack HiveColor = iota
-	ColorWhite
-)
-
-type HivePieceType = int
-
-const (
-	PieceTypeQueenBee HivePieceType = iota
-	PieceTypeSoldierAnt
-	PieceTypeGrasshopper
-	PieceTypeSpider
-	PieceTypeBeetle
-	PieceTypeLadybug
-	PieceTypeMosquito
-)
-
-type HiveTile struct {
-	color     HiveColor
-	position  HexVectorInt
-	pieceType HivePieceType
-}
-
-func (tile *HiveTile) FromJsValue(value js.Value) bool {
-	if value.Type() != js.TypeObject {
-		return false
-	}
-
-	color, ok := HiveColorFromJsValue(value.Get("color"))
-	if !ok {
-		return false
-	}
-
-	pieceType, ok := HivePieceTypeFromJsValue(value.Get("pieceType"))
-	if !ok {
-		return false
-	}
-
-	ok = tile.position.FromJsValue(value.Get("position"))
-	if !ok {
-		return false
-	}
-
-	tile.color = color
-	tile.pieceType = pieceType
-
-	return true
-}
-
-type HiveGame struct {
-	colorToMove HiveColor
-	// what move of the game we are on; starts at 1
-	move  int
-	tiles []HiveTile
-}
-
-func CreateHiveGame() HiveGame {
-	return HiveGame{
-		colorToMove: ColorBlack,
-		move:        1,
-		tiles:       make([]HiveTile, 0),
-	}
-}
-
-func (game *HiveGame) PlaceTile(position HexVectorInt, pieceType HivePieceType) bool {
-	// TODO check this is a valid placement
-
-	game.tiles = append(game.tiles, HiveTile{
-		color:     game.colorToMove,
-		position:  position,
-		pieceType: pieceType,
-	})
-
-	if game.colorToMove == ColorWhite {
-		game.move++
-	}
-
-	if game.colorToMove == ColorBlack {
-		game.colorToMove = ColorWhite
-	} else {
-		game.colorToMove = ColorBlack
-	}
-
-	return true
-}
-
-func (game *HiveGame) ToJsValue() js.Value {
-	tilesAsJsInterfaceSlice := make([]interface{}, 0, len(game.tiles))
-	for _, tile := range game.tiles {
+func HiveGameToJsValue(game hivegame.HiveGame) js.Value {
+	tilesAsJsInterfaceSlice := make([]interface{}, 0, len(game.Tiles))
+	for _, tile := range game.Tiles {
 		tilesAsJsInterfaceSlice = append(tilesAsJsInterfaceSlice, map[string]interface{}{
-			"color": tile.color,
+			"color": tile.Color,
 			"position": map[string]interface{}{
-				"q": tile.position.Q,
-				"r": tile.position.R,
+				"q": tile.Position.Q,
+				"r": tile.Position.R,
 			},
-			"pieceType": tile.pieceType,
+			"pieceType": tile.PieceType,
 		})
 	}
+
+	jsifiedBlackReserve := make(map[string]interface{})
+	for piece, count := range game.BlackReserve {
+		jsifiedBlackReserve[pieceTypeStrings[piece]] = count
+	}
+
+	jsifiedWhiteReserve := make(map[string]interface{})
+	for piece, count := range game.WhiteReserve {
+		jsifiedWhiteReserve[pieceTypeStrings[piece]] = count
+	}
+
 	return js.ValueOf(map[string]interface{}{
-		"colorToMove": game.colorToMove,
-		"move":        game.move,
-		"tiles":       tilesAsJsInterfaceSlice,
+		"colorToMove":  game.ColorToMove,
+		"move":         game.Move,
+		"tiles":        tilesAsJsInterfaceSlice,
+		"blackReserve": jsifiedBlackReserve,
+		"whiteReserve": jsifiedWhiteReserve,
 	})
 }
 
@@ -175,7 +62,7 @@ func JsValueToInt(value js.Value) (int, bool) {
 	return value.Int(), true
 }
 
-func HiveColorFromJsValue(value js.Value) (HiveColor, bool) {
+func HiveColorFromJsValue(value js.Value) (hivegame.HiveColor, bool) {
 	x, ok := JsValueToInt(value)
 
 	if !ok {
@@ -183,114 +70,221 @@ func HiveColorFromJsValue(value js.Value) (HiveColor, bool) {
 	}
 
 	switch x {
-	case ColorBlack:
+	case hivegame.ColorBlack:
 		fallthrough
-	case ColorWhite:
+	case hivegame.ColorWhite:
 		return x, true
 	}
 
 	return 0, false
 }
 
-func HivePieceTypeFromJsValue(value js.Value) (HivePieceType, bool) {
-	x, ok := JsValueToInt(value)
-
-	if !ok {
-		return 0, false
-	}
-
-	switch x {
-	case PieceTypeQueenBee:
-	case PieceTypeSoldierAnt:
-	case PieceTypeGrasshopper:
-	case PieceTypeSpider:
-	case PieceTypeBeetle:
-	case PieceTypeLadybug:
-	case PieceTypeMosquito:
-		return x, true
-	}
-
-	return 0, false
-}
-
-func (v *HexVectorInt) FromJsValue(value js.Value) bool {
+func JsValueToHexVectorInt(value js.Value) (hivegame.HexVectorInt, bool) {
 	rawQ := value.Get("q")
 	rawR := value.Get("r")
 
 	if rawQ.Type() != js.TypeNumber || rawR.Type() != js.TypeNumber {
-		return false
+		return hivegame.HexVectorInt{}, false
 	}
+
+	v := hivegame.HexVectorInt{}
 
 	v.Q = rawQ.Int()
 	v.R = rawR.Int()
 
-	return true
+	return v, true
 }
 
-func (game *HiveGame) FromJsValue(value js.Value) bool {
+func JsValueToHivePieceType(value js.Value) (hivegame.HivePieceType, bool) {
+	if value.Type() != js.TypeNumber {
+		return 0, false
+	}
+
+	isInteger := js.Global().Get("Number").Call("isInteger", value).Bool()
+	if !isInteger {
+		return 0, false
+	}
+
+	switch asInteger := value.Int(); asInteger {
+	case hivegame.PieceTypeQueenBee:
+		fallthrough
+	case hivegame.PieceTypeSoldierAnt:
+		fallthrough
+	case hivegame.PieceTypeGrasshopper:
+		fallthrough
+	case hivegame.PieceTypeSpider:
+		fallthrough
+	case hivegame.PieceTypeBeetle:
+		fallthrough
+	case hivegame.PieceTypeLadybug:
+		fallthrough
+	case hivegame.PieceTypeMosquito:
+		return asInteger, true
+	}
+
+	return 0, false
+}
+
+func JsValueToHiveGame(value js.Value) (hivegame.HiveGame, bool) {
 	if value.Type() != js.TypeObject {
-		return false
+		return hivegame.HiveGame{}, false
 	}
 
 	colorToMove, ok := HiveColorFromJsValue(value.Get("colorToMove"))
 
 	if !ok {
-		return false
+		return hivegame.HiveGame{}, false
 	}
 
 	move, ok := JsValueToInt(value.Get("move"))
 
 	if !ok {
-		return false
+		return hivegame.HiveGame{}, false
 	}
 
 	tiles := value.Get("tiles")
 
 	if tiles.Type() != js.TypeObject || !tiles.InstanceOf(js.Global().Get("Array")) {
-		return false
+		return hivegame.HiveGame{}, false
 	}
 
 	tilesLength := tiles.Get("length").Int()
 
-	parsedTiles := make([]HiveTile, tilesLength)
+	parsedTiles := make([]hivegame.HiveTile, tilesLength)
 
 	for i := range tilesLength {
-		ok := parsedTiles[i].FromJsValue(tiles.Index(i))
-		if !ok {
-			return false
+		//ok := parsedTiles[i].FromJsValue(tiles.Index(i))
+		if tile, ok := JsValueToHiveTile(tiles.Index(i)); !ok {
+			return hivegame.HiveGame{}, false
+		} else {
+			parsedTiles[i] = tile
 		}
 	}
 
-	game.colorToMove = colorToMove
-	game.move = move
-	game.tiles = parsedTiles
+	pieceTypes := []hivegame.HivePieceType{
+		hivegame.PieceTypeQueenBee,
+		hivegame.PieceTypeSoldierAnt,
+		hivegame.PieceTypeGrasshopper,
+		hivegame.PieceTypeSpider,
+		hivegame.PieceTypeBeetle,
+		hivegame.PieceTypeLadybug,
+		hivegame.PieceTypeMosquito,
+	}
 
-	return true
+	blackReserve := make(map[hivegame.HivePieceType]int)
+	blackReserveJsValue := value.Get("blackReserve")
+	for _, pieceType := range pieceTypes {
+		pieceString, ok := pieceTypeStrings[pieceType]
+
+		if !ok {
+			panic("cannot lookup string for piece value")
+		}
+
+		blackReserve[pieceType] = blackReserveJsValue.Get(pieceString).Int()
+	}
+
+	whiteReserve := make(map[hivegame.HivePieceType]int)
+	whiteReserveJsValue := value.Get("whiteReserve")
+	for _, pieceType := range pieceTypes {
+		pieceString, ok := pieceTypeStrings[pieceType]
+
+		if !ok {
+			panic("cannot lookup string for piece value")
+		}
+
+		whiteReserve[pieceType] = whiteReserveJsValue.Get(pieceString).Int()
+	}
+
+	game := hivegame.HiveGame{}
+
+	game.ColorToMove = colorToMove
+	game.Move = move
+	game.Tiles = parsedTiles
+	game.BlackReserve = blackReserve
+	game.WhiteReserve = whiteReserve
+
+	return game, true
+}
+
+func JsValueToHiveTile(value js.Value) (hivegame.HiveTile, bool) {
+	if value.Type() != js.TypeObject {
+		return hivegame.HiveTile{}, false
+	}
+
+	tile := hivegame.HiveTile{}
+
+	if color, ok := HiveColorFromJsValue(value.Get("color")); !ok {
+		return hivegame.HiveTile{}, false
+	} else {
+		tile.Color = color
+	}
+
+	if position, ok := JsValueToHexVectorInt(value.Get("position")); !ok {
+		return hivegame.HiveTile{}, false
+	} else {
+		tile.Position = position
+	}
+
+	if pieceType, ok := JsValueToHivePieceType(value.Get("pieceType")); !ok {
+		return hivegame.HiveTile{}, false
+	} else {
+		tile.PieceType = pieceType
+	}
+
+	return tile, true
+}
+
+func ExportEnumConstants(object js.Value) {
+	object.Set("COLOR_BLACK", hivegame.ColorBlack)
+	object.Set("COLOR_WHITE", hivegame.ColorWhite)
+
+	object.Set("PIECE_TYPE_QUEEN_BEE", hivegame.PieceTypeQueenBee)
+	object.Set("PIECE_TYPE_SOLDIER_ANT", hivegame.PieceTypeSoldierAnt)
+	object.Set("PIECE_TYPE_SPIDER", hivegame.PieceTypeSpider)
+	object.Set("PIECE_TYPE_GRASSHOPPER", hivegame.PieceTypeGrasshopper)
+	object.Set("PIECE_TYPE_BEETLE", hivegame.PieceTypeBeetle)
+	object.Set("PIECE_TYPE_LADYBUG", hivegame.PieceTypeLadybug)
+	object.Set("PIECE_TYPE_MOSQUITO", hivegame.PieceTypeMosquito)
 }
 
 func createHiveGame(this js.Value, args []js.Value) interface{} {
-	game := CreateHiveGame()
-	return game.ToJsValue()
+	game := hivegame.CreateHiveGame()
+	return HiveGameToJsValue(game)
 }
 
 func placeTile(this js.Value, args []js.Value) interface{} {
-	game := HiveGame{}
+	if len(args) != 3 {
+		panic("placeTile function expects 3 arguments : game, piece type, position")
+	}
 
-	ok := game.FromJsValue(args[0])
+	game, ok := JsValueToHiveGame(args[0])
 
 	if !ok {
 		panic("could not parse js value to hive game")
 	}
 
-	game.PlaceTile(HexVectorInt{}, PieceTypeQueenBee)
+	pieceType, ok := JsValueToHivePieceType(args[1])
 
-	return game.ToJsValue()
+	if !ok {
+		panic("could not parse js value to hive piece type")
+	}
+
+	position, ok := JsValueToHexVectorInt(args[2])
+
+	if !ok {
+		panic("could not parse js value to hex vector position")
+	}
+
+	game.PlaceTile(position, pieceType)
+
+	return HiveGameToJsValue(game)
 }
 
 func main() {
 	hiveModule := js.Global().Get("Object").New()
 	hiveModule.Set("createHiveGame", js.FuncOf(createHiveGame))
 	hiveModule.Set("placeTile", js.FuncOf(placeTile))
+	ExportEnumConstants(hiveModule)
 	js.Global().Set("hive", hiveModule)
 	select {}
 }
