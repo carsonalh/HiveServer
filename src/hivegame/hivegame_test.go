@@ -343,7 +343,190 @@ func TestMoveSpider(t *testing.T) {
 	}
 }
 
-func TestMoveGrasshopper(t *testing.T) { t.Skip() }
-func TestMoveLadybug(t *testing.T)     { t.Skip() }
-func TestMoveMosquito(t *testing.T)    { t.Skip() }
-func TestMoveBeetle(t *testing.T)      { t.Skip() }
+func TestMoveGrasshopper(t *testing.T) {
+	initGame := func() HiveGame {
+		game := CreateHiveGame()
+
+		game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee)
+		game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee)
+		game.PlaceTile(HexVectorInt{1, 0}, PieceTypeSoldierAnt)
+		game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeSoldierAnt)
+		game.PlaceTile(HexVectorInt{0, 1}, PieceTypeGrasshopper)
+
+		game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{-1, 1})
+
+		return game
+	}
+
+	game := initGame()
+	if ok := game.MoveTile(HexVectorInt{0, 1}, HexVectorInt{1, 1}); ok {
+		t.Fatalf("Falsely allowed grasshopper to move to adjacent tile")
+	}
+	if ok := game.MoveTile(HexVectorInt{0, 1}, HexVectorInt{-1, 2}); ok {
+		t.Fatalf("Falsely allowed grasshopper to move to adjacent tile")
+	}
+
+	if ok := game.MoveTile(HexVectorInt{0, 1}, HexVectorInt{0, -1}); !ok {
+		t.Fatalf("Failed to allow to move grasshopper legally")
+	}
+
+	game = initGame()
+	if ok := game.MoveTile(HexVectorInt{0, 1}, HexVectorInt{2, -1}); !ok {
+		t.Fatalf("Failed to allow to move grasshopper legally")
+	}
+
+	game = initGame()
+	if ok := game.MoveTile(HexVectorInt{0, 1}, HexVectorInt{-2, 1}); !ok {
+		t.Fatalf("Failed to allow to move grasshopper legally")
+	}
+}
+
+func TestMoveLadybug(t *testing.T) {
+	exampleFromRulebookP7 := func() HiveGame {
+		return HiveGame{
+			ColorToMove: ColorWhite,
+			Move:        6,
+			Tiles: []HiveTile{
+				{Color: ColorBlack, Position: HexVectorInt{0, 0}, PieceType: PieceTypeBeetle},
+				{Color: ColorBlack, Position: HexVectorInt{0, -2}, PieceType: PieceTypeQueenBee},
+				{Color: ColorWhite, Position: HexVectorInt{-1, 0}, PieceType: PieceTypeBeetle},
+				{Color: ColorWhite, Position: HexVectorInt{-1, -1}, PieceType: PieceTypeGrasshopper},
+				{Color: ColorWhite, Position: HexVectorInt{1, -1}, PieceType: PieceTypeQueenBee},
+				{Color: ColorWhite, Position: HexVectorInt{-1, 1}, PieceType: PieceTypeLadybug},
+			},
+		}
+	}
+
+	ladybugPosition := HexVectorInt{-1, 1}
+	legalMoves := []HexVectorInt{
+		{-2, 0},
+		{-2, 1},
+		{-2, -1},
+		{-1, -2},
+		{0, -1},
+		{1, -2},
+		{2, -2},
+		{2, -1},
+		{1, 0},
+		{0, 1},
+	}
+
+	illegalMoves := []HexVectorInt{
+		{0, -3},
+		{1, -3},
+		{-1, 2},
+		{-2, 2},
+	}
+
+	for _, legalMove := range legalMoves {
+		game := exampleFromRulebookP7()
+
+		if ok := game.MoveTile(ladybugPosition, legalMove); !ok {
+			t.Fatalf("Did not allow legal move from %v to %v", ladybugPosition, legalMove)
+		}
+	}
+
+	game := exampleFromRulebookP7()
+	for _, illegalMove := range illegalMoves {
+		if ok := game.MoveTile(ladybugPosition, illegalMove); ok {
+			t.Fatalf("Incorrectly allowed illegal move from %v to %v", ladybugPosition, illegalMove)
+		}
+	}
+}
+
+func TestMoveBeetle(t *testing.T) {
+	exampleFromRulebookP4 := func() HiveGame {
+		return HiveGame{
+			ColorToMove: ColorWhite,
+			Move:        6,
+			Tiles: []HiveTile{
+				{Color: ColorWhite, Position: HexVectorInt{1, -1}, PieceType: PieceTypeBeetle},
+				{Color: ColorWhite, Position: HexVectorInt{0, 0}, PieceType: PieceTypeSoldierAnt},
+				{Color: ColorWhite, Position: HexVectorInt{0, -1}, PieceType: PieceTypeSpider},
+				{Color: ColorWhite, Position: HexVectorInt{-1, 0}, PieceType: PieceTypeQueenBee},
+				{Color: ColorBlack, Position: HexVectorInt{0, 1}, PieceType: PieceTypeQueenBee},
+				{Color: ColorBlack, Position: HexVectorInt{1, 1}, PieceType: PieceTypeGrasshopper},
+			},
+		}
+	}
+
+	legalMoves := []HexVectorInt{
+		{0, 0},
+		{1, 0},
+		{0, -1},
+		{1, -2},
+	}
+
+	illegalMoves := []HexVectorInt{
+		{2, 0},
+		{0, -2},
+	}
+
+	beetlePosition := HexVectorInt{1, -1}
+
+	for _, legalMove := range legalMoves {
+		game := exampleFromRulebookP4()
+
+		if ok := game.MoveTile(beetlePosition, legalMove); !ok {
+			t.Fatalf("did not allow legal move from %v to %v", beetlePosition, legalMove)
+		}
+	}
+
+	game := exampleFromRulebookP4()
+	for _, illegalMove := range illegalMoves {
+		if ok := game.MoveTile(beetlePosition, illegalMove); ok {
+			t.Fatalf("Incorrectly allowed illegal move from %v to %v", beetlePosition, illegalMove)
+		}
+	}
+}
+
+func TestMoveMosquito(t *testing.T) {
+	exampleFromRulebookP8 := func() HiveGame {
+		return HiveGame{
+			ColorToMove: ColorWhite,
+			Move:        6,
+			Tiles: []HiveTile{
+				{Color: ColorWhite, Position: HexVectorInt{0, 0}, PieceType: PieceTypeBeetle},
+				{Color: ColorWhite, Position: HexVectorInt{1, 0}, PieceType: PieceTypeQueenBee},
+				{Color: ColorWhite, Position: HexVectorInt{-1, 1}, PieceType: PieceTypeMosquito},
+				{Color: ColorBlack, Position: HexVectorInt{-1, 0}, PieceType: PieceTypeSpider},
+				{Color: ColorBlack, Position: HexVectorInt{1, -1}, PieceType: PieceTypeQueenBee},
+			},
+		}
+	}
+
+	legalMoves := []HexVectorInt{
+		{0, 0},
+		{-1, 0},
+		{-1, -1},
+		{-2, 1},
+		{0, 1},
+		{2, 0},
+	}
+
+	illegalMoves := []HexVectorInt{
+		{-2, 0},
+		{0, -1},
+		{2, -1},
+		{1, 0},
+	}
+
+	mosquitoPosition := HexVectorInt{-1, 1}
+
+	for _, legalMove := range legalMoves {
+		game := exampleFromRulebookP8()
+
+		if ok := game.MoveTile(mosquitoPosition, legalMove); !ok {
+			t.Fatalf("Did not allow legal move from %v to %v", mosquitoPosition, legalMove)
+		}
+	}
+
+	game := exampleFromRulebookP8()
+	for _, illegalMove := range illegalMoves {
+		if ok := game.MoveTile(mosquitoPosition, illegalMove); ok {
+			t.Fatalf("Incorrectly allowed illegal move from %v to %v", mosquitoPosition, illegalMove)
+		}
+	}
+}
+
+func TestBeetleStack(t *testing.T) { t.Skip() }

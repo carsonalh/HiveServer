@@ -186,11 +186,19 @@ func (game *HiveGame) MoveTile(from, to HexVectorInt) bool {
 
 	switch fromTile.PieceType {
 	case PieceTypeQueenBee:
-		moves = game.queenMoves(fromTile.Position)
+		moves = game.queenBeeMoves(fromTile.Position)
 	case PieceTypeSoldierAnt:
-		moves = game.antMoves(fromTile.Position)
+		moves = game.soldierAntMoves(fromTile.Position)
 	case PieceTypeSpider:
 		moves = game.spiderMoves(fromTile.Position)
+	case PieceTypeGrasshopper:
+		moves = game.grasshopperMoves(fromTile.Position)
+	case PieceTypeLadybug:
+		moves = game.ladybugMoves(fromTile.Position)
+	case PieceTypeBeetle:
+		moves = game.beetleMoves(fromTile.Position)
+	case PieceTypeMosquito:
+		moves = game.mosquitoMoves(fromTile.Position)
 	default:
 		panic("unhandled case")
 	}
@@ -318,7 +326,7 @@ func (game *HiveGame) isPositionPinned(position HexVectorInt) bool {
 	return len(seen) != len(game.Tiles)-1
 }
 
-func (game *HiveGame) antMoves(from HexVectorInt) map[HexVectorInt]bool {
+func (game *HiveGame) soldierAntMoves(from HexVectorInt) map[HexVectorInt]bool {
 	seen := make(map[HexVectorInt]bool)
 	toExplore := make([]HexVectorInt, 0)
 
@@ -347,7 +355,7 @@ func (game *HiveGame) antMoves(from HexVectorInt) map[HexVectorInt]bool {
 	return seen
 }
 
-func (game *HiveGame) queenMoves(from HexVectorInt) map[HexVectorInt]bool {
+func (game *HiveGame) queenBeeMoves(from HexVectorInt) map[HexVectorInt]bool {
 	moves := game.adjacentMoves(from, from)
 	asMap := make(map[HexVectorInt]bool)
 
@@ -410,6 +418,208 @@ func (game *HiveGame) spiderMoves(from HexVectorInt) map[HexVectorInt]bool {
 	for _, move := range search {
 		if move.position != from {
 			validMoves[move.position] = true
+		}
+	}
+
+	return validMoves
+}
+
+func (game *HiveGame) grasshopperMoves(from HexVectorInt) map[HexVectorInt]bool {
+	adjacentTiles := from.AdjacentVectors()
+	neighbours := make([]HexVectorInt, 0, 6)
+	for _, tile := range game.Tiles {
+		for _, adj := range adjacentTiles {
+			if adj == tile.Position {
+				neighbours = append(neighbours, adj)
+				break
+			}
+		}
+	}
+
+	moves := make(map[HexVectorInt]bool)
+
+	for _, neighbour := range neighbours {
+		direction := neighbour.Subtract(from)
+		const LoopMax = 26 // computed as the greatest distance a hopper could ever jump + 1
+		exitedEarly := false
+
+		// we have already implicitly checked i = 1 by finding 'neighbour'
+		for i := 2; i <= LoopMax; i++ {
+			toCheck := direction.MultiplyScalar(i).Add(from)
+
+			occupied := false
+			for _, tile := range game.Tiles {
+				if tile.Position == toCheck {
+					occupied = true
+					break
+				}
+			}
+
+			if !occupied {
+				exitedEarly = true
+				moves[toCheck] = true
+				break
+			}
+		}
+
+		if !exitedEarly {
+			panic("in no case should a hopper jump more than 25 tiles")
+		}
+	}
+
+	return moves
+}
+
+func (game *HiveGame) ladybugMoves(from HexVectorInt) map[HexVectorInt]bool {
+	// do the same as the spider but enforce that it must be on top of another tile for the first
+	// two moves
+
+	type searchNode struct {
+		previous []HexVectorInt
+		position HexVectorInt
+	}
+
+	search := make([]searchNode, 0)
+	search = append(search, searchNode{previous: make([]HexVectorInt, 0), position: from})
+
+	for moveIndex := 0; moveIndex < 2; moveIndex++ {
+		for nodeIndex := len(search) - 1; nodeIndex >= 0; nodeIndex-- {
+			node := search[nodeIndex]
+			potentialNextMoves := make([]HexVectorInt, 0, 6)
+
+			for _, adj := range node.position.AdjacentVectors() {
+				isOccupied := false
+
+				for _, tile := range game.Tiles {
+					if tile.Position == adj {
+						isOccupied = true
+						break
+					}
+				}
+
+				if isOccupied {
+					potentialNextMoves = append(potentialNextMoves, adj)
+				}
+			}
+
+			for _, move := range potentialNextMoves {
+				alreadyMovedHere := false
+				for _, pastPosition := range node.previous {
+					if pastPosition == move {
+						alreadyMovedHere = true
+						break
+					}
+				}
+
+				if !alreadyMovedHere {
+					newNode := searchNode{previous: make([]HexVectorInt, 0, 2), position: move}
+
+					for _, previousMove := range node.previous {
+						newNode.previous = append(newNode.previous, previousMove)
+					}
+
+					newNode.previous = append(newNode.previous, node.position)
+
+					search = append(search, newNode)
+				}
+			}
+
+			search = append(search[:nodeIndex], search[nodeIndex+1:]...)
+		}
+	}
+
+	// now search for unoccupied positions
+	validMoves := make(map[HexVectorInt]bool)
+	for _, node := range search {
+		potentialNextMoves := make([]HexVectorInt, 0, 6)
+		for _, adj := range node.position.AdjacentVectors() {
+			isOccupied := false
+
+			for _, tile := range game.Tiles {
+				if tile.Position == adj {
+					isOccupied = true
+					break
+				}
+			}
+
+			if !isOccupied {
+				potentialNextMoves = append(potentialNextMoves, adj)
+			}
+		}
+
+		// because the current position is "stacked", anything here is a valid move
+		for _, move := range potentialNextMoves {
+			validMoves[move] = true
+		}
+	}
+
+	return validMoves
+}
+
+func (game *HiveGame) beetleMoves(from HexVectorInt) map[HexVectorInt]bool {
+	validMoves := make(map[HexVectorInt]bool)
+
+	for _, adj := range from.AdjacentVectors() {
+		isOccupied := false
+
+		for _, tile := range game.Tiles {
+			if tile.Position == adj {
+				isOccupied = true
+				break
+			}
+		}
+
+		if isOccupied {
+			validMoves[adj] = true
+		}
+	}
+
+	for move := range validMoves {
+		validMoves[Rotate60().Transform(move.Subtract(from)).Add(from)] = true
+		validMoves[Rotate300().Transform(move.Subtract(from)).Add(from)] = true
+	}
+
+	return validMoves
+	// TODO restructure the HiveTile struct to allow a height property, then do one move at a time
+}
+
+func (game *HiveGame) mosquitoMoves(from HexVectorInt) map[HexVectorInt]bool {
+	neighbourTiles := make([]HiveTile, 0, 6)
+
+	for _, adj := range from.AdjacentVectors() {
+		for _, tile := range game.Tiles {
+			if tile.Position == adj {
+				neighbourTiles = append(neighbourTiles, tile)
+			}
+		}
+	}
+
+	validMoves := make(map[HexVectorInt]bool)
+
+	addAll := func(dest, src map[HexVectorInt]bool) {
+		for k, v := range src {
+			dest[k] = v
+		}
+	}
+
+	for _, tile := range neighbourTiles {
+		switch tile.PieceType {
+		case PieceTypeQueenBee:
+			addAll(validMoves, game.queenBeeMoves(from))
+		case PieceTypeSoldierAnt:
+			addAll(validMoves, game.soldierAntMoves(from))
+		case PieceTypeGrasshopper:
+			addAll(validMoves, game.grasshopperMoves(from))
+		case PieceTypeSpider:
+			addAll(validMoves, game.spiderMoves(from))
+		case PieceTypeBeetle:
+			addAll(validMoves, game.beetleMoves(from))
+		case PieceTypeLadybug:
+			addAll(validMoves, game.ladybugMoves(from))
+		case PieceTypeMosquito:
+			continue
+		default:
+			panic("unhandled case")
 		}
 	}
 

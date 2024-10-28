@@ -16,6 +16,10 @@ func (v HexVectorInt) Subtract(u HexVectorInt) HexVectorInt {
 	return HexVectorInt{Q: v.Q - u.Q, R: v.R - u.R}
 }
 
+func (v HexVectorInt) MultiplyScalar(s int) HexVectorInt {
+	return HexVectorInt{Q: v.Q * s, R: v.R * s}
+}
+
 func (v HexVectorInt) AdjacentVectors() [6]HexVectorInt {
 	adjacentUnits := [6]HexVectorInt{
 		{1, 0},
