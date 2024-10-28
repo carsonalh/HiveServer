@@ -26,7 +26,8 @@ func HiveGameToJsValue(game hivegame.HiveGame) js.Value {
 				"q": tile.Position.Q,
 				"r": tile.Position.R,
 			},
-			"pieceType": tile.PieceType,
+			"pieceType":   tile.PieceType,
+			"stackHeight": tile.StackHeight,
 		})
 	}
 
