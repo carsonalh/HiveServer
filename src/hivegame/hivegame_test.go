@@ -1,6 +1,9 @@
 package hivegame
 
-import "testing"
+import (
+	"github.com/go-test/deep"
+	"testing"
+)
 
 func TestCreateHiveGame(t *testing.T) {
 	game := CreateHiveGame()
@@ -218,3 +221,129 @@ func TestRespectsFreedomToMove(t *testing.T) {
 		t.Fatalf("Allowed ant to violate Freedom to Move")
 	}
 }
+
+func TestOneHiveRule(t *testing.T) {
+	game := CreateHiveGame()
+
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Did not allow a legal move")
+		}
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 0}, PieceTypeSoldierAnt))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeSoldierAnt))
+
+	if ok := game.MoveTile(HexVectorInt{0, 0}, HexVectorInt{1, -1}); ok {
+		t.Fatalf("Allowed one-hive rule violation")
+	}
+
+	expectLegal(game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{1, -1}))
+
+	if ok := game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{-2, -1}); ok {
+		t.Fatalf("Allowed one-hive rule violation")
+	}
+
+	expectLegal(game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{-2, 1}))
+
+	expectedState := []HiveTile{
+		{PieceType: PieceTypeQueenBee, Position: HexVectorInt{0, 0}, Color: ColorBlack},
+		{PieceType: PieceTypeQueenBee, Position: HexVectorInt{-1, 0}, Color: ColorWhite},
+		{PieceType: PieceTypeSoldierAnt, Position: HexVectorInt{1, -1}, Color: ColorBlack},
+		{PieceType: PieceTypeSoldierAnt, Position: HexVectorInt{-2, 1}, Color: ColorWhite},
+	}
+
+	tiles := game.Tiles
+
+	diff := deep.Equal(expectedState, tiles)
+	if diff != nil {
+		t.Fatalf("Mismatched game state: %v", diff)
+	}
+}
+
+func TestCannotMovePiecesOfOppositeColor(t *testing.T) { t.Skip() }
+
+func TestMoveQueenBee(t *testing.T) {
+	game := CreateHiveGame()
+
+	game.PlaceTile(HexVectorInt{0, 0}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{1, 0}, PieceTypeQueenBee)
+	game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeQueenBee)
+
+	var ok bool
+
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{-3, 0})
+	if ok {
+		t.Fatalf("Allowed queen to move more than one tile")
+	}
+
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{2, 0})
+	if ok {
+		t.Fatalf("Allowed queen to move off the hive")
+	}
+
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{1, -1})
+	if !ok {
+		t.Fatalf("Did not allow valid queen move")
+	}
+}
+
+func TestMoveSpider(t *testing.T) {
+	initGame := func() HiveGame {
+		game := CreateHiveGame()
+
+		game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee)
+		game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee)
+		game.PlaceTile(HexVectorInt{1, 0}, PieceTypeSpider)
+		game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeSoldierAnt)
+
+		return game
+	}
+
+	var ok bool
+	game := initGame()
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{1, -1})
+	if ok {
+		t.Fatalf("Falsely allowed spider to move one space")
+	}
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{0, 1})
+	if ok {
+		t.Fatalf("Falsely allowed spider to move one space")
+	}
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{0, -1})
+	if ok {
+		t.Fatalf("Falsely allowed spider to move two spaces")
+	}
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{-1, 1})
+	if ok {
+		t.Fatalf("Falsely allowed spider to move two spaces")
+	}
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{-2, -1})
+	if ok {
+		t.Fatalf("Falsely allowed spider to move four spaces")
+	}
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{-3, 1})
+	if ok {
+		t.Fatalf("Falsely allowed spider to move four spaces")
+	}
+
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{-2, 1})
+	if !ok {
+		t.Fatalf("Would not let spider move three spaces")
+	}
+
+	game = initGame()
+
+	ok = game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{-1, -1})
+	if !ok {
+		t.Fatalf("Would not let spider move three spaces")
+	}
+}
+
+func TestMoveGrasshopper(t *testing.T) { t.Skip() }
+func TestMoveLadybug(t *testing.T)     { t.Skip() }
+func TestMoveMosquito(t *testing.T)    { t.Skip() }
+func TestMoveBeetle(t *testing.T)      { t.Skip() }
