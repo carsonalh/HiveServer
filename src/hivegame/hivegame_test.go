@@ -263,7 +263,18 @@ func TestOneHiveRule(t *testing.T) {
 	}
 }
 
-func TestCannotMovePiecesOfOppositeColor(t *testing.T) { t.Skip() }
+func TestCannotMovePiecesOfOppositeColor(t *testing.T) {
+	game := CreateHiveGame()
+
+	game.PlaceTile(HexVectorInt{0, 0}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeGrasshopper)
+	game.PlaceTile(HexVectorInt{1, 0}, PieceTypeQueenBee)
+	game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeQueenBee)
+
+	if ok := game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{-2, 1}); ok {
+		t.Fatalf("Allowed black to move a white piece")
+	}
+}
 
 func TestMoveQueenBee(t *testing.T) {
 	game := CreateHiveGame()
@@ -529,4 +540,34 @@ func TestMoveMosquito(t *testing.T) {
 	}
 }
 
-func TestBeetleStack(t *testing.T) { t.Skip() }
+func TestBeetleStack(t *testing.T) {
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Incorrectly failed to make a legal move")
+		}
+	}
+
+	game := CreateHiveGame()
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeGrasshopper))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeGrasshopper))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeQueenBee))
+
+	expectLegal(game.PlaceTile(HexVectorInt{1, -1}, PieceTypeBeetle))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 1}, PieceTypeBeetle))
+
+	expectLegal(game.MoveTile(HexVectorInt{1, -1}, HexVectorInt{0, 0}))
+	expectLegal(game.MoveTile(HexVectorInt{-2, 1}, HexVectorInt{-1, 0}))
+
+	expectLegal(game.MoveTile(HexVectorInt{0, 0}, HexVectorInt{-1, 0}))
+
+	expectLegal(game.PlaceTile(HexVectorInt{-3, 0}, PieceTypeGrasshopper))
+	if ok := game.PlaceTile(HexVectorInt{0, -1}, PieceTypeSpider); !ok {
+		t.Fatalf("Failure to place next to a beetle stack with same color on top")
+	}
+
+	if ok := game.MoveTile(HexVectorInt{-1, 0}, HexVectorInt{0, 0}); ok {
+		t.Fatalf("Tried to move beetle under top of stack")
+	}
+}

@@ -20,9 +20,10 @@ const (
 )
 
 type HiveTile struct {
-	Color     HiveColor
-	Position  HexVectorInt
-	PieceType HivePieceType
+	Color       HiveColor
+	Position    HexVectorInt
+	PieceType   HivePieceType
+	StackHeight int
 }
 
 type HiveGame struct {
@@ -123,15 +124,17 @@ func (game *HiveGame) PlaceTile(position HexVectorInt, pieceType HivePieceType) 
 	} else if game.Move > 1 {
 		touchesOwn, touchesOpposition := false, false
 
-		for _, tile := range game.Tiles {
-			for _, adj := range position.AdjacentVectors() {
-				if tile.Position == adj {
-					if game.ColorToMove == tile.Color {
-						touchesOwn = true
-					} else {
-						touchesOpposition = true
-					}
-				}
+		for _, adj := range position.AdjacentVectors() {
+			tileAtAdj := game.tileAt(adj)
+
+			if tileAtAdj == nil {
+				continue
+			}
+
+			if tileAtAdj.Color == game.ColorToMove {
+				touchesOwn = true
+			} else {
+				touchesOpposition = true
 			}
 		}
 
@@ -149,35 +152,24 @@ func (game *HiveGame) PlaceTile(position HexVectorInt, pieceType HivePieceType) 
 		PieceType: pieceType,
 	})
 
-	if game.ColorToMove == ColorWhite {
-		game.Move++
-	}
-
-	if game.ColorToMove == ColorBlack {
-		game.ColorToMove = ColorWhite
-	} else {
-		game.ColorToMove = ColorBlack
-	}
+	game.incrementMove()
 
 	return true
 }
 
 func (game *HiveGame) MoveTile(from, to HexVectorInt) bool {
-	var fromTile *HiveTile = nil
-
-	for i, tile := range game.Tiles {
-		if tile.Position == from {
-			fromTile = &game.Tiles[i]
-			break
-		}
-	}
+	fromTile := game.tileAt(from)
 
 	if fromTile == nil {
 		// cannot move a tile which is not in play
 		return false
 	}
 
-	if game.isPositionPinned(from) {
+	if fromTile.Color != game.ColorToMove {
+		return false
+	}
+
+	if game.isTilePinned(fromTile) {
 		// cannot move a tile if doing such would create multiple hives
 		return false
 	}
@@ -208,8 +200,37 @@ func (game *HiveGame) MoveTile(from, to HexVectorInt) bool {
 		return false
 	}
 
+	fromTile.StackHeight = game.nextStackHeight(to)
 	fromTile.Position = to
+	game.incrementMove()
 	return true
+}
+
+func (game *HiveGame) incrementMove() {
+	if game.ColorToMove == ColorWhite {
+		game.Move++
+	}
+
+	if game.ColorToMove == ColorBlack {
+		game.ColorToMove = ColorWhite
+	} else {
+		game.ColorToMove = ColorBlack
+	}
+
+}
+
+func (game *HiveGame) tileAt(position HexVectorInt) *HiveTile {
+	greatestStackHeight := -1
+	var found *HiveTile = nil
+
+	for i, tile := range game.Tiles {
+		if tile.Position == position && tile.StackHeight > greatestStackHeight {
+			greatestStackHeight = tile.StackHeight
+			found = &game.Tiles[i]
+		}
+	}
+
+	return found
 }
 
 func (game *HiveGame) adjacentMoves(position, ignore HexVectorInt) []HexVectorInt {
@@ -259,35 +280,35 @@ func (game *HiveGame) adjacentMoves(position, ignore HexVectorInt) []HexVectorIn
 	return withFreedomToMove
 }
 
-func (game *HiveGame) isPositionPinned(position HexVectorInt) bool {
-	foundTile := false
-	for _, tile := range game.Tiles {
-		if tile.Position == position {
-			foundTile = true
-			break
-		}
+func (game *HiveGame) isTilePinned(gameTile *HiveTile) bool {
+	if gameTile.StackHeight != game.tileAt(gameTile.Position).StackHeight {
+		return true
+	} else if gameTile.StackHeight > 0 {
+		return false
 	}
 
-	if !foundTile {
-		panic("must only check for pins on tiles that are in the hive")
+	type searchNode struct {
+		position    HexVectorInt
+		stackHeight int
 	}
 
-	var neighbour *HexVectorInt = nil
+	var neighbour *searchNode = nil
 	for _, tile := range game.Tiles {
-		for _, adj := range position.AdjacentVectors() {
+		for _, adj := range gameTile.Position.AdjacentVectors() {
 			if tile.Position == adj {
-				neighbour = &adj
+				neighbour = &searchNode{position: tile.Position, stackHeight: tile.StackHeight}
 				break
 			}
 		}
 	}
 
 	if neighbour == nil {
-		panic("every piece should have at least one neighbour by the time this function is called")
+		// definitely an edge case, but it is technically not pinned if it has no neighbours
+		return false
 	}
 
-	seen := make(map[HexVectorInt]bool)
-	toExplore := make([]HexVectorInt, 0)
+	seen := make(map[searchNode]bool)
+	toExplore := make([]searchNode, 0)
 
 	toExplore = append(toExplore, *neighbour)
 
@@ -299,23 +320,18 @@ func (game *HiveGame) isPositionPinned(position HexVectorInt) bool {
 			continue
 		}
 
-		neighbours := make([]HexVectorInt, 0, 6)
-		for _, adj := range node.AdjacentVectors() {
-			if adj == position {
+		neighbours := make([]searchNode, 0, 6)
+		for _, adj := range node.position.AdjacentVectors() {
+			if adj == gameTile.Position {
 				continue
 			}
 
-			isOccupied := false
 			for _, tile := range game.Tiles {
 				if tile.Position == adj {
-					isOccupied = true
-					break
+					neighbours = append(neighbours, searchNode{tile.Position, tile.StackHeight})
 				}
 			}
 
-			if isOccupied {
-				neighbours = append(neighbours, adj)
-			}
 		}
 
 		toExplore = append(toExplore, neighbours...)
@@ -559,6 +575,22 @@ func (game *HiveGame) ladybugMoves(from HexVectorInt) map[HexVectorInt]bool {
 func (game *HiveGame) beetleMoves(from HexVectorInt) map[HexVectorInt]bool {
 	validMoves := make(map[HexVectorInt]bool)
 
+	greatestStackHeight := -1
+	var beetleOnStack *HiveTile = nil
+
+	for i, tile := range game.Tiles {
+		if tile.Color == game.ColorToMove && tile.PieceType == PieceTypeBeetle {
+			if tile.StackHeight > greatestStackHeight {
+				greatestStackHeight = tile.StackHeight
+				beetleOnStack = &game.Tiles[i]
+			}
+		}
+	}
+
+	if beetleOnStack == nil {
+		return validMoves
+	}
+
 	for _, adj := range from.AdjacentVectors() {
 		isOccupied := false
 
@@ -580,7 +612,18 @@ func (game *HiveGame) beetleMoves(from HexVectorInt) map[HexVectorInt]bool {
 	}
 
 	return validMoves
-	// TODO restructure the HiveTile struct to allow a height property, then do one move at a time
+}
+
+func (game *HiveGame) nextStackHeight(position HexVectorInt) int {
+	greatestStackHeight := -1
+
+	for _, tile := range game.Tiles {
+		if tile.Position == position && tile.StackHeight > greatestStackHeight {
+			greatestStackHeight = tile.StackHeight
+		}
+	}
+
+	return greatestStackHeight + 1
 }
 
 func (game *HiveGame) mosquitoMoves(from HexVectorInt) map[HexVectorInt]bool {
