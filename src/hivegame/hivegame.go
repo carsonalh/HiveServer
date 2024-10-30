@@ -206,6 +206,53 @@ func (game *HiveGame) MoveTile(from, to HexVectorInt) bool {
 	return true
 }
 
+func (game *HiveGame) LegalMoves(from HexVectorInt) []HexVectorInt {
+	fromTile := game.tileAt(from)
+
+	if fromTile == nil {
+		// cannot move a tile which is not in play
+		return make([]HexVectorInt, 0)
+	}
+
+	if fromTile.Color != game.ColorToMove {
+		return make([]HexVectorInt, 0)
+	}
+
+	if game.isTilePinned(fromTile) {
+		// cannot move a tile if doing such would create multiple hives
+		return make([]HexVectorInt, 0)
+	}
+
+	var moves map[HexVectorInt]bool
+
+	switch fromTile.PieceType {
+	case PieceTypeQueenBee:
+		moves = game.queenBeeMoves(fromTile.Position)
+	case PieceTypeSoldierAnt:
+		moves = game.soldierAntMoves(fromTile.Position)
+	case PieceTypeSpider:
+		moves = game.spiderMoves(fromTile.Position)
+	case PieceTypeGrasshopper:
+		moves = game.grasshopperMoves(fromTile.Position)
+	case PieceTypeLadybug:
+		moves = game.ladybugMoves(fromTile.Position)
+	case PieceTypeBeetle:
+		moves = game.beetleMoves(fromTile.Position)
+	case PieceTypeMosquito:
+		moves = game.mosquitoMoves(fromTile.Position)
+	default:
+		panic("unhandled case")
+	}
+
+	movesSlice := make([]HexVectorInt, 0)
+
+	for move := range moves {
+		movesSlice = append(movesSlice, move)
+	}
+
+	return movesSlice
+}
+
 func (game *HiveGame) incrementMove() {
 	if game.ColorToMove == ColorWhite {
 		game.Move++
