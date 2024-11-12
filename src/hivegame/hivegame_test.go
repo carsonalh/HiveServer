@@ -626,4 +626,47 @@ func TestStackMosquitos(t *testing.T) {
 	}
 }
 
+func TestOnceMosquitosAreStackedTheyAreBeetles(t *testing.T) {
+	game := CreateHiveGame()
+
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Incorrectly failed to make a legal move")
+		}
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 0}, PieceTypeBeetle))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeMosquito))
+
+	expectLegal(game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{0, 0}))
+	expectLegal(game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{-1, -1}))
+	expectLegal(game.MoveTile(HexVectorInt{0, 0}, HexVectorInt{-1, 0}))
+	expectLegal(game.MoveTile(HexVectorInt{-1, -1}, HexVectorInt{-1, 0}))
+	expectLegal(game.MoveTile(HexVectorInt{0, 0}, HexVectorInt{-1, 1}))
+	expectLegal(game.MoveTile(HexVectorInt{-1, 0}, HexVectorInt{-1, 1}))
+}
+
+func TestCannotHopAcrossGaps(t *testing.T) {
+	game := CreateHiveGame()
+
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Incorrectly failed to make a legal move")
+		}
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 1}, PieceTypeGrasshopper))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 0}, PieceTypeSoldierAnt))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 2}, PieceTypeSpider))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 1}, PieceTypeBeetle))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 2}, PieceTypeSoldierAnt))
+
+	if ok := game.MoveTile(HexVectorInt{1, 1}, HexVectorInt{0, 2}); ok {
+		t.Fatalf("Allowed hopping across a gap in a single move")
+	}
+}
+
 func TestWinCondition(t *testing.T) { t.Skip() }

@@ -339,25 +339,33 @@ func (game *HiveGame) isTilePinned(gameTile *HiveTile) bool {
 		stackHeight int
 	}
 
-	var neighbour *searchNode = nil
-	for _, tile := range game.Tiles {
-		for _, adj := range gameTile.Position.AdjacentVectors() {
+	// We start the search with the first stack of neighbours in one position we can find.
+	// Most stacks will have a size of one, but for the ones that don't we would otherwise have an
+	// incomplete search.
+	neighbourStack := make([]searchNode, 0)
+
+	for _, adj := range gameTile.Position.AdjacentVectors() {
+		for _, tile := range game.Tiles {
 			if tile.Position == adj {
-				neighbour = &searchNode{position: tile.Position, stackHeight: tile.StackHeight}
-				break
+				neighbourStack = append(neighbourStack, searchNode{
+					position:    adj,
+					stackHeight: tile.StackHeight,
+				})
 			}
+		}
+
+		if len(neighbourStack) > 0 {
+			break
 		}
 	}
 
-	if neighbour == nil {
+	if len(neighbourStack) == 0 {
 		// definitely an edge case, but it is technically not pinned if it has no neighbours
 		return false
 	}
 
 	seen := make(map[searchNode]bool)
-	toExplore := make([]searchNode, 0)
-
-	toExplore = append(toExplore, *neighbour)
+	toExplore := neighbourStack
 
 	for len(toExplore) > 0 {
 		node := toExplore[0]
@@ -653,7 +661,13 @@ func (game *HiveGame) beetleMoves(from HexVectorInt) map[HexVectorInt]bool {
 		}
 	}
 
+	validStackPositions := make([]HexVectorInt, 0, len(validMoves))
+
 	for move := range validMoves {
+		validStackPositions = append(validStackPositions, move)
+	}
+
+	for _, move := range validStackPositions {
 		validMoves[Rotate60().Transform(move.Subtract(from)).Add(from)] = true
 		validMoves[Rotate300().Transform(move.Subtract(from)).Add(from)] = true
 	}
@@ -674,6 +688,10 @@ func (game *HiveGame) nextStackHeight(position HexVectorInt) int {
 }
 
 func (game *HiveGame) mosquitoMoves(from HexVectorInt) map[HexVectorInt]bool {
+	if game.tileAt(from).StackHeight > 0 {
+		return game.beetleMoves(from)
+	}
+
 	neighbourTiles := make([]HiveTile, 0, 6)
 
 	for _, adj := range from.AdjacentVectors() {
