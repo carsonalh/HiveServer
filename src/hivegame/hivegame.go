@@ -623,18 +623,18 @@ func (game *HiveGame) beetleMoves(from HexVectorInt) map[HexVectorInt]bool {
 	validMoves := make(map[HexVectorInt]bool)
 
 	greatestStackHeight := -1
-	var beetleOnStack *HiveTile = nil
+	var topTileOnStack *HiveTile = nil
 
 	for i, tile := range game.Tiles {
-		if tile.Color == game.ColorToMove && tile.PieceType == PieceTypeBeetle {
+		if tile.Color == game.ColorToMove {
 			if tile.StackHeight > greatestStackHeight {
 				greatestStackHeight = tile.StackHeight
-				beetleOnStack = &game.Tiles[i]
+				topTileOnStack = &game.Tiles[i]
 			}
 		}
 	}
 
-	if beetleOnStack == nil {
+	if topTileOnStack == nil {
 		return validMoves
 	}
 
@@ -677,10 +677,8 @@ func (game *HiveGame) mosquitoMoves(from HexVectorInt) map[HexVectorInt]bool {
 	neighbourTiles := make([]HiveTile, 0, 6)
 
 	for _, adj := range from.AdjacentVectors() {
-		for _, tile := range game.Tiles {
-			if tile.Position == adj {
-				neighbourTiles = append(neighbourTiles, tile)
-			}
+		if tile := game.tileAt(adj); tile != nil {
+			neighbourTiles = append(neighbourTiles, *tile)
 		}
 	}
 

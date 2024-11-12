@@ -233,6 +233,12 @@ func JsValueToHiveTile(value js.Value) (hivegame.HiveTile, bool) {
 		tile.PieceType = pieceType
 	}
 
+	if stackHeight, ok := JsValueToInt(value.Get("stackHeight")); !ok {
+		return hivegame.HiveTile{}, false
+	} else {
+		tile.StackHeight = stackHeight
+	}
+
 	return tile, true
 }
 
@@ -398,6 +404,102 @@ func colorToMove(_ js.Value, args []js.Value) interface{} {
 	return js.ValueOf(game.ColorToMove)
 }
 
+func idOfLastPlaced(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		panic("idOfLastPlaced function expects 1 argument : game")
+	}
+
+	game, err := JsValueToHiveGame(args[0])
+
+	if err != nil {
+		panic(err)
+	}
+
+	return js.ValueOf(len(game.Tiles) - 1)
+}
+
+func idOfTileAt(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 2 {
+		panic("idOfTileAt function expects 2 arguments : game, position")
+	}
+
+	game, err := JsValueToHiveGame(args[0])
+
+	if err != nil {
+		panic(err)
+	}
+
+	position, ok := JsValueToHexVectorInt(args[1])
+
+	if !ok {
+		panic("could not parse js value to hex vector position")
+	}
+
+	greatestStackHeight := -1
+	highestTileIndex := -1
+
+	for i, tile := range game.Tiles {
+		if tile.Position == position && tile.StackHeight > greatestStackHeight {
+			greatestStackHeight = tile.StackHeight
+			highestTileIndex = i
+		}
+	}
+
+	return js.ValueOf(highestTileIndex)
+}
+
+func getTilesRemaining(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 3 {
+		panic("idOfTileAt function expects 3 arguments : game, color, piece type")
+	}
+
+	var game hivegame.HiveGame
+	var color hivegame.HiveColor
+	var pieceType hivegame.HivePieceType
+	var err error
+	var ok bool
+
+	if game, err = JsValueToHiveGame(args[0]); err != nil {
+		panic(err)
+	}
+
+	if color, ok = HiveColorFromJsValue(args[1]); !ok {
+		panic("Could not parse color parameter")
+	}
+
+	if pieceType, ok = JsValueToHivePieceType(args[2]); !ok {
+		panic("Could not parse piece type parameter")
+	}
+
+	var reserve map[hivegame.HivePieceType]int
+
+	switch color {
+	case hivegame.ColorBlack:
+		reserve = game.BlackReserve
+	case hivegame.ColorWhite:
+		reserve = game.WhiteReserve
+	}
+
+	remaining := reserve[pieceType]
+
+	return js.ValueOf(remaining)
+}
+
+func moveNumber(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		panic("moveNumber function expects 1 argument : game")
+	}
+
+	var game hivegame.HiveGame
+	var err error
+
+	if game, err = JsValueToHiveGame(args[0]); err != nil {
+		panic(err)
+	}
+
+	return js.ValueOf(game.Move)
+}
+
 func main() {
 	hiveModule := js.Global().Get("Object").New()
 	hiveModule.Set("createHiveGame", js.FuncOf(createHiveGame))
@@ -406,6 +508,10 @@ func main() {
 	hiveModule.Set("legalMoves", js.FuncOf(legalMoves))
 	hiveModule.Set("tiles", js.FuncOf(tiles))
 	hiveModule.Set("colorToMove", js.FuncOf(colorToMove))
+	hiveModule.Set("idOfLastPlaced", js.FuncOf(idOfLastPlaced))
+	hiveModule.Set("idOfTileAt", js.FuncOf(idOfTileAt))
+	hiveModule.Set("getTilesRemaining", js.FuncOf(getTilesRemaining))
+	hiveModule.Set("moveNumber", js.FuncOf(moveNumber))
 	ExportEnumConstants(hiveModule)
 	js.Global().Set("hive", hiveModule)
 	select {}

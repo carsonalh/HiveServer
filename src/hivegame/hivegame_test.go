@@ -571,3 +571,59 @@ func TestBeetleStack(t *testing.T) {
 		t.Fatalf("Tried to move beetle under top of stack")
 	}
 }
+
+func TestStackHeightsAreUpdated(t *testing.T) {
+	game := CreateHiveGame()
+
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Incorrectly failed to make a legal move")
+		}
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 0}, PieceTypeBeetle))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeBeetle))
+
+	game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{0, 0})
+
+	if game.Tiles[2].StackHeight != 1 {
+		t.Fatalf("The beetle should have had its stack height updated")
+	}
+
+	for i := 0; i < 4; i++ {
+		if i != 2 && game.Tiles[i].StackHeight != 0 {
+			t.Fatalf("Some other tile at idx. %d has stack height %d", i, game.Tiles[i].StackHeight)
+		}
+	}
+}
+
+func TestStackMosquitos(t *testing.T) {
+	game := CreateHiveGame()
+
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Incorrectly failed to make a legal move")
+		}
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee))
+	expectLegal(game.PlaceTile(HexVectorInt{1, 0}, PieceTypeBeetle))
+	expectLegal(game.PlaceTile(HexVectorInt{-2, 0}, PieceTypeMosquito))
+
+	expectLegal(game.MoveTile(HexVectorInt{1, 0}, HexVectorInt{0, 0}))
+	expectLegal(game.MoveTile(HexVectorInt{-2, 0}, HexVectorInt{-1, -1}))
+	expectLegal(game.MoveTile(HexVectorInt{0, 0}, HexVectorInt{-1, 0}))
+
+	if ok := game.MoveTile(HexVectorInt{-1, -1}, HexVectorInt{-1, 0}); !ok {
+		t.Fatalf("Failed to let mosquito behave like a beetle")
+	}
+
+	if game.Tiles[3].StackHeight != 2 {
+		t.Fatalf("Did not stack the mosquito on top of the beetle")
+	}
+}
+
+func TestWinCondition(t *testing.T) { t.Skip() }
