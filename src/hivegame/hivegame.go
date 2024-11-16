@@ -153,6 +153,7 @@ func (game *HiveGame) PlaceTile(position HexVectorInt, pieceType HivePieceType) 
 	})
 
 	game.incrementMove()
+	game.skipIfNoLegalMoves()
 
 	return true
 }
@@ -203,6 +204,7 @@ func (game *HiveGame) MoveTile(from, to HexVectorInt) bool {
 	fromTile.StackHeight = game.nextStackHeight(to)
 	fromTile.Position = to
 	game.incrementMove()
+	game.skipIfNoLegalMoves()
 	return true
 }
 
@@ -251,6 +253,105 @@ func (game *HiveGame) LegalMoves(from HexVectorInt) []HexVectorInt {
 	}
 
 	return movesSlice
+}
+
+func (game *HiveGame) IsOver() (over bool, winner HiveColor) {
+	var surroundedQueen *HiveTile
+
+	for i, tile := range game.Tiles {
+		if tile.PieceType == PieceTypeQueenBee {
+			surrounded := true
+			for _, adj := range tile.Position.AdjacentVectors() {
+				if game.tileAt(adj) == nil {
+					surrounded = false
+					break
+				}
+			}
+
+			if surrounded {
+				surroundedQueen = &game.Tiles[i]
+				break
+			}
+		}
+	}
+
+	if surroundedQueen == nil {
+		return false, 0
+	}
+
+	color := surroundedQueen.Color
+
+	if color == ColorBlack {
+		color = ColorWhite
+	} else {
+		color = ColorBlack
+	}
+
+	return true, color
+}
+
+func (game *HiveGame) skipIfNoLegalMoves() {
+	queenBeePlaced := false
+
+	for _, tile := range game.Tiles {
+		if tile.Color == game.ColorToMove && tile.PieceType == PieceTypeQueenBee {
+			queenBeePlaced = true
+			break
+		}
+	}
+
+	if game.Move == 1 || !queenBeePlaced {
+		return
+	}
+
+	legalMovements := false
+
+	for i, tile := range game.Tiles {
+		if tile.Color == game.ColorToMove {
+			if !game.isTilePinned(&game.Tiles[i]) && len(game.LegalMoves(tile.Position)) > 0 {
+				legalMovements = true
+				break
+			}
+		}
+	}
+
+	if legalMovements || len(game.legalPlacements()) > 0 {
+		return
+	}
+	game.incrementMove()
+}
+
+func (game *HiveGame) legalPlacements() map[HexVectorInt]bool {
+	perimeter := make([]HexVectorInt, 0)
+
+	for _, tile := range game.Tiles {
+		if tile.Color == game.ColorToMove {
+			for _, adj := range tile.Position.AdjacentVectors() {
+				if game.tileAt(adj) == nil {
+					perimeter = append(perimeter, adj)
+				}
+			}
+		}
+	}
+
+	legalPlacements := make(map[HexVectorInt]bool)
+
+	for _, position := range perimeter {
+		neighboursOpponent := false
+		for _, adj := range position.AdjacentVectors() {
+			adjacentTile := game.tileAt(adj)
+			if adjacentTile != nil && adjacentTile.Color != game.ColorToMove {
+				neighboursOpponent = true
+				break
+			}
+		}
+
+		if !neighboursOpponent {
+			legalPlacements[position] = true
+		}
+	}
+
+	return legalPlacements
 }
 
 func (game *HiveGame) incrementMove() {

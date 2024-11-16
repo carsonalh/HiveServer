@@ -500,6 +500,40 @@ func moveNumber(_ js.Value, args []js.Value) interface{} {
 	return js.ValueOf(game.Move)
 }
 
+func isOver(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		panic("isOver function expects 1 argument : game")
+	}
+
+	var game hivegame.HiveGame
+	var err error
+
+	if game, err = JsValueToHiveGame(args[0]); err != nil {
+		panic(err)
+	}
+
+	over, _ := game.IsOver()
+
+	return js.ValueOf(over)
+}
+
+func winner(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		panic("winner function expects 1 argument : game")
+	}
+
+	var game hivegame.HiveGame
+	var err error
+
+	if game, err = JsValueToHiveGame(args[0]); err != nil {
+		panic(err)
+	}
+
+	_, winner := game.IsOver()
+
+	return js.ValueOf(winner)
+}
+
 func main() {
 	hiveModule := js.Global().Get("Object").New()
 	hiveModule.Set("createHiveGame", js.FuncOf(createHiveGame))
@@ -512,6 +546,8 @@ func main() {
 	hiveModule.Set("idOfTileAt", js.FuncOf(idOfTileAt))
 	hiveModule.Set("getTilesRemaining", js.FuncOf(getTilesRemaining))
 	hiveModule.Set("moveNumber", js.FuncOf(moveNumber))
+	hiveModule.Set("isOver", js.FuncOf(isOver))
+	hiveModule.Set("winner", js.FuncOf(winner))
 	ExportEnumConstants(hiveModule)
 	js.Global().Set("hive", hiveModule)
 	select {}

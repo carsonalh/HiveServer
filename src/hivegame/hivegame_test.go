@@ -669,4 +669,38 @@ func TestCannotHopAcrossGaps(t *testing.T) {
 	}
 }
 
-func TestWinCondition(t *testing.T) { t.Skip() }
+func TestPinQueenAndSurround(t *testing.T) {
+	game := CreateHiveGame()
+
+	expectLegal := func(ret bool) {
+		if !ret {
+			t.Fatalf("Incorrectly failed to make a legal move")
+		}
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee))   // Black, move 1
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeQueenBee))  // White, move 1
+	expectLegal(game.PlaceTile(HexVectorInt{1, -1}, PieceTypeBeetle))    // Black, move 2
+	expectLegal(game.MoveTile(HexVectorInt{-1, 0}, HexVectorInt{0, -1})) // White, move 2
+	expectLegal(game.MoveTile(HexVectorInt{1, -1}, HexVectorInt{0, -1})) // Black, move 3
+
+	if over, _ := game.IsOver(); over {
+		t.Fatalf("Game being declared as over too early")
+	}
+
+	if game.ColorToMove != ColorBlack || game.Move != 4 {
+		t.Fatalf("Did not skip white's move, though white had no available moves")
+	}
+
+	expectLegal(game.PlaceTile(HexVectorInt{1, -1}, PieceTypeGrasshopper))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, -1}, PieceTypeGrasshopper))
+	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeGrasshopper))
+	expectLegal(game.PlaceTile(HexVectorInt{0, -2}, PieceTypeSoldierAnt))
+	expectLegal(game.PlaceTile(HexVectorInt{1, -2}, PieceTypeSoldierAnt))
+
+	if over, winner := game.IsOver(); !over {
+		t.Fatalf("Game with surrounded queen must be over")
+	} else if winner != ColorBlack {
+		t.Fatalf("Black must be the winner of a game wherein white's queen is surrounded")
+	}
+}
