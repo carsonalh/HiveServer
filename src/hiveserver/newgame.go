@@ -41,28 +41,33 @@ func (h *newGameHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 
 	response.Token = tokenString
 
-	if state.pendingGame == nil {
-		// we are the only ones who set state.pendingGame, so this is safe
+	{
+		state.pendingGameMutex.Lock()
+		defer state.pendingGameMutex.Unlock()
 
-		// we are player 1
+		if state.pendingGame == nil {
+			// we are the only ones who set state.pendingGame, so this is safe
 
-		response.Id = h.previousGameId.Add(1)
-		state.pendingGame = &pendingGame{
-			gameId:   response.Id,
-			playerId: playerId,
+			// we are player 1
+
+			response.Id = h.previousGameId.Add(1)
+			state.pendingGame = &pendingGame{
+				gameId:   response.Id,
+				playerId: playerId,
+			}
+			response.Pending = true
+		} else {
+			// here, we are player 2
+			// either player 1 forgot to join or has joined and is blocking, either way, they shouldn't bother us here
+
+			game := createHostedGame(playerId, state.pendingGame.playerId)
+			response.Id = state.pendingGame.gameId
+			response.Game = &game.game
+			state.games.Store(response.Id, game)
+			state.pendingGame = nil
+			state.notifyGameFulfilled.Signal()
+			response.Pending = false
 		}
-		response.Pending = true
-	} else {
-		// here, we are player 2
-		// either player 1 forgot to join or has joined and is blocking, either way, they shouldn't bother us here
-
-		game := createHostedGame(playerId, state.pendingGame.playerId)
-		response.Id = state.pendingGame.gameId
-		response.Game = &game.game
-		state.games.Store(response.Id, game)
-		state.pendingGame = nil
-		state.notifyGameFulfilled.Signal()
-		response.Pending = false
 	}
 
 	err = json.NewEncoder(w).Encode(response)

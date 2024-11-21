@@ -24,6 +24,7 @@ type serverState struct {
 	// map game id (uint64) to hostedGame
 	games               sync.Map
 	pendingGame         *pendingGame
+	pendingGameMutex    sync.Mutex
 	notifyGameFulfilled *sync.Cond
 }
 
