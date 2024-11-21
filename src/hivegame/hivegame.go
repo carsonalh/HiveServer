@@ -20,19 +20,19 @@ const (
 )
 
 type HiveTile struct {
-	Color       HiveColor
-	Position    HexVectorInt
-	PieceType   HivePieceType
-	StackHeight int
+	Color       HiveColor     `json:"color"`
+	Position    HexVectorInt  `json:"position"`
+	PieceType   HivePieceType `json:"pieceType"`
+	StackHeight int           `json:"stackHeight"`
 }
 
 type HiveGame struct {
-	ColorToMove HiveColor
+	ColorToMove HiveColor `json:"colorToMove"`
 	// what Move of the game we are on; starts at 1
-	Move         int
-	WhiteReserve map[HivePieceType]int
-	BlackReserve map[HivePieceType]int
-	Tiles        []HiveTile
+	Move         int                   `json:"move"`
+	WhiteReserve map[HivePieceType]int `json:"whiteReserve"`
+	BlackReserve map[HivePieceType]int `json:"blackReserve"`
+	Tiles        []HiveTile            `json:"tiles"`
 }
 
 func CreateHiveGame() HiveGame {
