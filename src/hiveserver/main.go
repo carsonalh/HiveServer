@@ -39,6 +39,14 @@ type serverState struct {
 
 var state *serverState
 
+func withHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	state = new(serverState)
 	err := godotenv.Load(".env")
@@ -49,9 +57,9 @@ func main() {
 
 	state.pendingGameCondition = sync.NewCond(&sync.Mutex{})
 
-	http.Handle("GET /new-game", new(newGameHandler))
-	http.Handle("POST /join-game/{id}", new(joinGameHandler))
-	http.Handle("GET /game/{id}/latest-opponent-move", new(latestOpponentMoveHandler))
-	http.Handle("POST /game/{id}/moves", new(makeMoveHandler))
+	http.Handle("GET /new-game", withHeaders(new(newGameHandler)))
+	http.Handle("POST /join-game/{id}", withHeaders(new(joinGameHandler)))
+	http.Handle("GET /game/{id}/latest-opponent-move", withHeaders(new(latestOpponentMoveHandler)))
+	http.Handle("POST /game/{id}/moves", withHeaders(new(makeMoveHandler)))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
