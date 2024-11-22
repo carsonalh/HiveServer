@@ -86,6 +86,11 @@ func (h *makeMoveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	game := &hostedGame.game
 
+	if over, _ := game.IsOver(); over {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	if game.ColorToMove != playerColor {
 		w.WriteHeader(http.StatusForbidden)
 		_, err = fmt.Fprintln(w, "Tried to move on the opponent's turn")

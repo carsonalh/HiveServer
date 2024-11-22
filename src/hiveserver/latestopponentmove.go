@@ -44,6 +44,11 @@ func (h *latestOpponentMoveHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if over, _ := hostedGame.game.IsOver(); over {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	var playerColor hivegame.HiveColor
 
 	if playerId == hostedGame.blackPlayer {
