@@ -17,10 +17,11 @@ type newGameHandler struct {
 }
 
 type newGameResponse struct {
-	Id      uint64             `json:"id"`
-	Token   string             `json:"token"`
-	Game    *hivegame.HiveGame `json:"game,omitempty"`
-	Pending bool               `json:"pending"`
+	Id      uint64              `json:"id"`
+	Token   string              `json:"token"`
+	Game    *hivegame.HiveGame  `json:"game,omitempty"`
+	Color   *hivegame.HiveColor `json:"color,omitempty"`
+	Pending bool                `json:"pending"`
 }
 
 func (h *newGameHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
@@ -62,8 +63,16 @@ func (h *newGameHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 
 			game := createHostedGame(playerId, state.pendingGame.playerId)
 			response.Id = state.pendingGame.gameId
+			game.gameId = response.Id
 			response.Game = &game.game
-			state.games.Store(response.Id, game)
+			color := new(hivegame.HiveColor)
+			if game.blackPlayer == playerId {
+				*color = hivegame.ColorBlack
+			} else {
+				*color = hivegame.ColorWhite
+			}
+			response.Color = color
+			state.games.Store(response.Id, &game)
 			state.pendingGame = nil
 			state.notifyGameFulfilled.Signal()
 			response.Pending = false

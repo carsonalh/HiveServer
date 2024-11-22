@@ -5,7 +5,8 @@ type HexMatrixInt struct {
 }
 
 type HexVectorInt struct {
-	Q, R int
+	Q int `json:"q"`
+	R int `json:"r"`
 }
 
 func (v HexVectorInt) Add(u HexVectorInt) HexVectorInt {

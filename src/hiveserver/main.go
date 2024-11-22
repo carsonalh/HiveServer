@@ -41,5 +41,7 @@ func main() {
 
 	http.Handle("GET /new-game", new(newGameHandler))
 	http.Handle("POST /join-game/{id}", new(joinGameHandler))
+	http.Handle("GET /game/{id}/latest-opponent-move", new(latestOpponentMoveHandler))
+	http.Handle("POST /game/{id}/moves", new(makeMoveHandler))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

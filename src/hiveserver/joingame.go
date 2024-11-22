@@ -3,41 +3,25 @@ package main
 import (
 	"HiveServer/src/hivegame"
 	"encoding/json"
-	"fmt"
-	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 )
 
 type joinGameHandler struct{}
 
 type joinGameResponse struct {
-	Id   uint64            `json:"id"`
-	Game hivegame.HiveGame `json:"game"`
+	Id    uint64             `json:"id"`
+	Game  hivegame.HiveGame  `json:"game"`
+	Color hivegame.HiveColor `json:"color"`
 }
 
 func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("POST %s", r.URL.Path)
 
-	authorization := r.Header.Get("Authorization")
-	var tokenString string
-	_, err := fmt.Sscanf(authorization, "Bearer %s", &tokenString)
+	playerId, ok := loadPlayerId(w, r)
 
-	if err != nil {
-		log.Printf("POST /join-game/{id}: could not parse bearer token, %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	_, err = jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
-	})
-
-	if err != nil {
-		log.Printf("POST /join-game/{id}: could not decode jwt, %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	if !ok {
 		return
 	}
 
@@ -51,17 +35,23 @@ func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// wait for another player to join this game
-	state.notifyGameFulfilled.L.Lock()
+	{
+		state.notifyGameFulfilled.L.Lock()
+		defer state.notifyGameFulfilled.L.Unlock()
 
-	for state.pendingGame != nil {
-		state.notifyGameFulfilled.Wait()
+		if state.pendingGame != nil && state.pendingGame.playerId != playerId {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		for state.pendingGame != nil {
+			state.notifyGameFulfilled.Wait()
+		}
 	}
-
-	state.notifyGameFulfilled.L.Unlock()
 
 	found, ok := state.games.Load(uint64(id))
 
-	hostedGame := found.(hostedGame)
+	hostedGame := found.(*hostedGame)
 
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -69,9 +59,17 @@ func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var color hivegame.HiveColor
+	if playerId == hostedGame.blackPlayer {
+		color = hivegame.ColorBlack
+	} else {
+		color = hivegame.ColorWhite
+	}
+
 	response := joinGameResponse{
-		Id:   uint64(id),
-		Game: hostedGame.game,
+		Id:    uint64(id),
+		Game:  hostedGame.game,
+		Color: color,
 	}
 
 	err = json.NewEncoder(w).Encode(response)
