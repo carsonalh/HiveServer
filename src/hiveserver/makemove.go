@@ -105,15 +105,33 @@ func (h *makeMoveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var moveSucceeded bool
+
 	switch request.MoveType {
 	case moveTypeMove:
-		game.MoveTile(request.Movement.From, request.Movement.To)
+		moveSucceeded = game.MoveTile(request.Movement.From, request.Movement.To)
 	case moveTypePlace:
-		game.PlaceTile(request.Placement.Position, request.Placement.PieceType)
+		moveSucceeded = game.PlaceTile(request.Placement.Position, request.Placement.PieceType)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	if !moveSucceeded {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	currentTick := toTick(uint(game.Move), uint(game.ColorToMove))
+
+	hostedGame.nextMove.L.Lock()
+	if playerColor == hivegame.ColorBlack {
+		hostedGame.blackLastSeenTick = currentTick
+	} else {
+		hostedGame.whiteLastSeenTick = currentTick
+	}
+	hostedGame.nextMove.Signal()
+	hostedGame.nextMove.L.Unlock()
 
 	err = json.NewEncoder(w).Encode(makeMoveResponse{game})
 

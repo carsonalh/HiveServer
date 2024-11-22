@@ -35,29 +35,29 @@ func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// wait for another player to join this game
-	{
-		state.notifyGameFulfilled.L.Lock()
-		defer state.notifyGameFulfilled.L.Unlock()
+	state.pendingGameCondition.L.Lock()
 
-		if state.pendingGame != nil && state.pendingGame.playerId != playerId {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		for state.pendingGame != nil {
-			state.notifyGameFulfilled.Wait()
-		}
+	if state.pendingGame != nil && state.pendingGame.playerId != playerId {
+		w.WriteHeader(http.StatusUnauthorized)
+		state.pendingGameCondition.L.Unlock()
+		return
 	}
 
-	found, ok := state.games.Load(uint64(id))
+	for state.pendingGame != nil {
+		state.pendingGameCondition.Wait()
+	}
 
-	hostedGame := found.(*hostedGame)
+	state.pendingGameCondition.L.Unlock()
+
+	found, ok := state.games.Load(uint64(id))
 
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("POST /join-game/{id}: 500 game was not added to current games in state")
 		return
 	}
+
+	hostedGame := found.(*hostedGame)
 
 	var color hivegame.HiveColor
 	if playerId == hostedGame.blackPlayer {
