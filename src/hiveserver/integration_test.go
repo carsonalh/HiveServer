@@ -1,6 +1,8 @@
 package main
 
 import (
+	"HiveServer/src/hivegame"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -265,5 +267,236 @@ func TestManyPlayersJoinAtOnce(t *testing.T) {
 		} else {
 			playerIds[r.playerId] = struct{}{}
 		}
+	}
+}
+
+func TestPlayTwoMovesInARow(t *testing.T) {
+	response, _ := http.Get("http://localhost:8080/new-game")
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("Player 1 got %d", response.StatusCode)
+	}
+
+	decoded := newGameResponse{}
+
+	_ = json.NewDecoder(response.Body).Decode(&decoded)
+
+	player1Token := decoded.Token
+	gameId := decoded.Id
+
+	response, _ = http.Get("http://localhost:8080/new-game")
+
+	_ = json.NewDecoder(response.Body).Decode(&decoded)
+
+	if decoded.Id != gameId {
+		t.Fatalf("Cannot play a game when the players are in different games")
+	}
+
+	player2Token := decoded.Token
+	player2Color := *decoded.Color
+
+	var currentPlayerToken *string
+
+	switch player2Color {
+	case hivegame.ColorBlack:
+		currentPlayerToken = &player2Token
+	case hivegame.ColorWhite:
+		currentPlayerToken = &player1Token
+	default:
+		t.Fatalf("Server gave back a bad colour")
+	}
+
+	var buffer bytes.Buffer
+
+	_ = json.NewEncoder(&buffer).Encode(&makeMoveRequest{
+		MoveType: moveTypePlace,
+		Placement: &makeMovePlacement{
+			PieceType: hivegame.PieceTypeQueenBee,
+			Position:  hivegame.HexVectorInt{0, 0},
+		},
+	})
+
+	request, _ := http.NewRequest("POST", fmt.Sprintf("http://localhost:8080/game/%d/moves", gameId), &buffer)
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *currentPlayerToken))
+
+	response, _ = http.DefaultClient.Do(request)
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("The server would not allow a legal move for the current player (got %d)", response.StatusCode)
+	}
+
+	request, _ = http.NewRequest("POST", fmt.Sprintf("http://localhost:8080/game/%d/moves", gameId), &buffer)
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *currentPlayerToken))
+
+	response, _ = http.DefaultClient.Do(request)
+
+	if response.StatusCode == http.StatusOK {
+		t.Fatalf("The server gave a 200 for a player trying to make two moves in a row")
+	}
+}
+
+func TestGameSkipsATurn(t *testing.T) {
+	movesToEncounterSkip := []makeMoveRequest{
+		{
+			MoveType: moveTypePlace,
+			Placement: &makeMovePlacement{
+				PieceType: hivegame.PieceTypeQueenBee,
+				Position:  hivegame.HexVectorInt{0, 0},
+			},
+		},
+		{
+			MoveType: moveTypePlace,
+			Placement: &makeMovePlacement{
+				PieceType: hivegame.PieceTypeQueenBee,
+				Position:  hivegame.HexVectorInt{-1, 0},
+			},
+		},
+		{
+			MoveType: moveTypePlace,
+			Placement: &makeMovePlacement{
+				PieceType: hivegame.PieceTypeBeetle,
+				Position:  hivegame.HexVectorInt{1, 0},
+			},
+		},
+		{
+			MoveType: moveTypePlace,
+			Placement: &makeMovePlacement{
+				PieceType: hivegame.PieceTypeBeetle,
+				Position:  hivegame.HexVectorInt{-2, 0},
+			},
+		},
+		{
+			MoveType: moveTypeMove,
+			Movement: &makeMoveMovement{
+				From: hivegame.HexVectorInt{1, 0},
+				To:   hivegame.HexVectorInt{0, 0},
+			},
+		},
+		{
+			MoveType: moveTypeMove,
+			Movement: &makeMoveMovement{
+				From: hivegame.HexVectorInt{-2, 0},
+				To:   hivegame.HexVectorInt{-1, 0},
+			},
+		},
+		{
+			MoveType: moveTypeMove,
+			Movement: &makeMoveMovement{
+				From: hivegame.HexVectorInt{0, 0},
+				To:   hivegame.HexVectorInt{-1, 0},
+			},
+		},
+	}
+
+	response, _ := http.Get("http://localhost:8080/new-game")
+
+	decoded := newGameResponse{}
+	_ = json.NewDecoder(response.Body).Decode(&decoded)
+
+	player1Token := decoded.Token
+	gameId := decoded.Id
+
+	response, _ = http.Get("http://localhost:8080/new-game")
+	decoded = newGameResponse{}
+	_ = json.NewDecoder(response.Body).Decode(&decoded)
+
+	player2Token := decoded.Token
+
+	if decoded.Id != gameId {
+		t.Fatalf("Cannot play a game when the players are in different games")
+	}
+
+	var currentPlayerToken *string
+
+	switch *decoded.Color {
+	case hivegame.ColorBlack:
+		currentPlayerToken = &player2Token
+	case hivegame.ColorWhite:
+		currentPlayerToken = &player1Token
+	default:
+		t.Fatalf("Server gave back a bad colour")
+	}
+
+	var buffer bytes.Buffer
+
+	for _, request := range movesToEncounterSkip {
+		buffer.Reset()
+		_ = json.NewEncoder(&buffer).Encode(request)
+		r, _ := http.NewRequest(
+			"POST",
+			fmt.Sprintf("http://localhost:8080/game/%d/moves", gameId),
+			&buffer)
+		r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *currentPlayerToken))
+
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("Cannot continue, setting up skipped move and got %d", response.StatusCode)
+		}
+
+		if currentPlayerToken == &player1Token {
+			currentPlayerToken = &player2Token
+		} else {
+			currentPlayerToken = &player1Token
+		}
+	}
+
+	// try and wait for the player with no legal moves, should not block
+	request, _ := http.NewRequest(
+		"GET",
+		fmt.Sprintf("http://localhost:8080/game/%d/latest-opponent-move", gameId),
+		nil)
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *currentPlayerToken))
+
+	response, _ = http.DefaultClient.Do(request)
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("Did not allow to check on opponent moves for skipped opponent, status %d", response.StatusCode)
+	}
+
+	// trying to post a move from the incorrect player should fail
+	buffer.Reset()
+	_ = json.NewEncoder(&buffer).Encode(&makeMoveRequest{
+		MoveType: moveTypePlace,
+		Placement: &makeMovePlacement{
+			PieceType: hivegame.PieceTypeSpider,
+			Position:  hivegame.HexVectorInt{-1, -1},
+		},
+	})
+	request, _ = http.NewRequest(
+		"POST",
+		fmt.Sprintf("http://localhost:8080/game/%d/moves", gameId),
+		&buffer)
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *currentPlayerToken))
+
+	response, _ = http.DefaultClient.Do(request)
+
+	if response.StatusCode == http.StatusOK {
+		t.Fatal("Incorrectly allowed a player with no legal moves to move")
+	}
+
+	// now try the correct player to make the same move
+	if currentPlayerToken == &player1Token {
+		currentPlayerToken = &player2Token
+	} else {
+		currentPlayerToken = &player1Token
+	}
+
+	buffer.Reset()
+	_ = json.NewEncoder(&buffer).Encode(&makeMoveRequest{
+		MoveType: moveTypePlace,
+		Placement: &makeMovePlacement{
+			PieceType: hivegame.PieceTypeSpider,
+			Position:  hivegame.HexVectorInt{-1, -1},
+		},
+	})
+	request, _ = http.NewRequest(
+		"POST",
+		fmt.Sprintf("http://localhost:8080/game/%d/moves", gameId),
+		&buffer)
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", *currentPlayerToken))
+
+	response, _ = http.DefaultClient.Do(request)
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatal("Did not allow the player with moves to make a legal move")
 	}
 }

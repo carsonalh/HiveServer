@@ -19,16 +19,20 @@ const (
 	moveTypeMove  = "MOVE"
 )
 
+type makeMovePlacement struct {
+	PieceType hivegame.HivePieceType `json:"pieceType"`
+	Position  hivegame.HexVectorInt  `json:"position"`
+}
+
+type makeMoveMovement struct {
+	From hivegame.HexVectorInt `json:"from"`
+	To   hivegame.HexVectorInt `json:"to"`
+}
+
 type makeMoveRequest struct {
-	MoveType  moveType `json:"moveType"`
-	Placement struct {
-		PieceType hivegame.HivePieceType `json:"pieceType"`
-		Position  hivegame.HexVectorInt  `json:"position"`
-	} `json:"placement,omitempty"`
-	Movement struct {
-		From hivegame.HexVectorInt `json:"from"`
-		To   hivegame.HexVectorInt `json:"to"`
-	} `json:"movement,omitempty"`
+	MoveType  moveType           `json:"moveType"`
+	Placement *makeMovePlacement `json:"placement,omitempty"`
+	Movement  *makeMoveMovement  `json:"movement,omitempty"`
 }
 
 type makeMoveResponse struct {
