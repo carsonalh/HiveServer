@@ -2,9 +2,11 @@ package main
 
 import (
 	"HiveServer/src/hivegame"
+	"errors"
 	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 )
 
@@ -47,19 +49,44 @@ func withHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func main() {
+func createServer() *http.Server {
 	state = new(serverState)
+	state.pendingGameCondition = sync.NewCond(&sync.Mutex{})
+
+	port := os.Getenv("PORT")
+
+	if port == "" {
+		port = "8080"
+	}
+
+	mux := http.NewServeMux()
+
+	mux.Handle("GET /new-game", new(newGameHandler))
+	mux.Handle("POST /join-game/{id}", new(joinGameHandler))
+	mux.Handle("GET /game/{id}/latest-opponent-move", new(latestOpponentMoveHandler))
+	mux.Handle("POST /game/{id}/moves", new(makeMoveHandler))
+
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: withHeaders(mux),
+	}
+
+	go func() {
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+
+	return server
+}
+
+func main() {
 	err := godotenv.Load(".env")
 
 	if err != nil {
 		log.Fatalf("Error loading .env file:\n%v\n", err)
 	}
 
-	state.pendingGameCondition = sync.NewCond(&sync.Mutex{})
-
-	http.Handle("GET /new-game", withHeaders(new(newGameHandler)))
-	http.Handle("POST /join-game/{id}", withHeaders(new(joinGameHandler)))
-	http.Handle("GET /game/{id}/latest-opponent-move", withHeaders(new(latestOpponentMoveHandler)))
-	http.Handle("POST /game/{id}/moves", withHeaders(new(makeMoveHandler)))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	createServer()
+	select {}
 }

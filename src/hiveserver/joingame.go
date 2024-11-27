@@ -27,18 +27,54 @@ func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	idString := r.PathValue("id")
 
-	id, err := strconv.Atoi(idString)
+	idInt, err := strconv.Atoi(idString)
+	id := uint64(idInt)
 
-	if err != nil || state.pendingGame == nil || state.pendingGame.gameId != uint64(id) {
+	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
+	// first check if the game already exists
+	found, gameExists := state.games.Load(id)
+	var currentGame *hostedGame
+
+	if gameExists {
+		currentGame, ok = found.(*hostedGame)
+
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Game of id %d is not a *hostedGame type, this is a bug", id)
+			return
+		}
+
+		var playerColor = new(hivegame.HiveColor)
+
+		switch playerId {
+		case currentGame.blackPlayer:
+			*playerColor = hivegame.ColorBlack
+		case currentGame.whitePlayer:
+			*playerColor = hivegame.ColorWhite
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Player hacked into a game that was not theirs, player = %d, game = %d", playerId, id)
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(joinGameResponse{
+			Id:    id,
+			Color: *playerColor,
+			Game:  currentGame.game,
+		})
+		return
+	}
+
+	// the game does not already exist;
 	// wait for another player to join this game
 	state.pendingGameCondition.L.Lock()
 
 	if state.pendingGame != nil && state.pendingGame.playerId != playerId {
-		w.WriteHeader(http.StatusUnauthorized)
+		w.WriteHeader(http.StatusNotFound)
 		state.pendingGameCondition.L.Unlock()
 		return
 	}
@@ -49,7 +85,7 @@ func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	state.pendingGameCondition.L.Unlock()
 
-	found, ok := state.games.Load(uint64(id))
+	found, ok = state.games.Load(id)
 
 	if !ok {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -57,18 +93,18 @@ func (h *joinGameHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hostedGame := found.(*hostedGame)
+	currentGame = found.(*hostedGame)
 
 	var color hivegame.HiveColor
-	if playerId == hostedGame.blackPlayer {
+	if playerId == currentGame.blackPlayer {
 		color = hivegame.ColorBlack
 	} else {
 		color = hivegame.ColorWhite
 	}
 
 	response := joinGameResponse{
-		Id:    uint64(id),
-		Game:  hostedGame.game,
+		Id:    id,
+		Game:  currentGame.game,
 		Color: color,
 	}
 
