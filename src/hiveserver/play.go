@@ -31,6 +31,7 @@ type LiveGame struct {
 const (
 	EventAuthenticate  = "AUTHENTICATE"
 	EventConnect       = "CONNECT"
+	EventDisconnect    = "DISCONNECT"
 	EventPlayMove      = "PLAY_MOVE"
 	EventRejectedMove  = "REJECT_MOVE"
 	EventGameCompleted = "GAME_COMPLETED"
@@ -176,6 +177,8 @@ func (h *PlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		color = hivegame.ColorWhite
 	}
 
+	message = PlayMessage{}
+
 	message.Event = EventConnect
 	message.Connect = &GameConnect{
 		Color: color,
@@ -183,10 +186,16 @@ func (h *PlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	_ = conn.WriteJSON(message)
 
-	message = PlayMessage{}
-
 	for {
-		_ = conn.ReadJSON(&message)
+		err = conn.ReadJSON(&message)
+
+		if err != nil {
+			message = PlayMessage{}
+			message.Event = EventDisconnect
+			_ = oppConn.WriteJSON(message)
+			_ = oppConn.Close()
+			return
+		}
 
 		switch message.Event {
 		case EventPlayMove:
@@ -196,17 +205,15 @@ func (h *PlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			if color != liveGame.game.ColorToMove {
 				legal = false
-				goto checkLegal
+			} else {
+				switch message.Move.MoveType {
+				case MoveTypeMovement:
+					legal = liveGame.game.MoveTile(message.Move.Movement.From, message.Move.Movement.To)
+				case MoveTypePlacement:
+					legal = liveGame.game.PlaceTile(message.Move.Placement.Position, message.Move.Placement.PieceType)
+				}
 			}
 
-			switch message.Move.MoveType {
-			case MoveTypeMovement:
-				legal = liveGame.game.MoveTile(message.Move.Movement.From, message.Move.Movement.To)
-			case MoveTypePlacement:
-				legal = liveGame.game.PlaceTile(message.Move.Placement.Position, message.Move.Placement.PieceType)
-			}
-
-		checkLegal:
 			liveGame.mutex.Unlock()
 
 			if !legal {
@@ -242,7 +249,7 @@ func (h *PlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_ = oppConn.Close()
 
 			liveGame.mutex.Unlock()
-			break
+			return
 		}
 		liveGame.mutex.Unlock()
 	}
