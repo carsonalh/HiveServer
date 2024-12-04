@@ -1,7 +1,6 @@
 package main
 
 import (
-	"HiveServer/src/hivegame"
 	"errors"
 	"github.com/joho/godotenv"
 	"log"
@@ -9,23 +8,6 @@ import (
 	"os"
 	"sync"
 )
-
-type hostedGame struct {
-	blackPlayer uint64
-	// We invent the concept of a `tick`, which is a kind of atomic move.
-	// Sometimes turns are skipped etc. so we want to know the last thing a player has 'seen' for
-	// synchronisation purposes later
-	blackLastSeenTick uint
-	whitePlayer       uint64
-	whiteLastSeenTick uint
-	gameId            uint64
-	nextMove          *sync.Cond
-	game              hivegame.HiveGame
-}
-
-func toTick(moveNumber, playerToMove uint) uint {
-	return 2*moveNumber + playerToMove
-}
 
 type pendingGame struct {
 	playerId uint64
@@ -61,10 +43,8 @@ func createServer() *http.Server {
 
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /new-game", new(newGameHandler))
-	mux.Handle("POST /join-game/{id}", new(joinGameHandler))
-	mux.Handle("GET /game/{id}/latest-opponent-move", new(latestOpponentMoveHandler))
-	mux.Handle("POST /game/{id}/moves", new(makeMoveHandler))
+	mux.Handle("GET /join", new(joinHandler))
+	mux.Handle("GET /play", NewPlayHandler())
 
 	server := &http.Server{
 		Addr:    ":" + port,
