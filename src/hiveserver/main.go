@@ -7,22 +7,13 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 )
 
-type pendingGame struct {
-	playerId uint64
-	gameId   uint64
+type ServerState struct {
+	hostedGameState HostedGameState
 }
 
-type serverState struct {
-	// map game id (uint64) to hostedGame
-	games                sync.Map
-	pendingGame          *pendingGame
-	pendingGameCondition *sync.Cond
-}
-
-var state *serverState
+var state *ServerState
 
 func withHeaders(next http.Handler, restrictOrigin bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,8 +39,7 @@ func createServer() *http.Server {
 	useTls = !development
 	restrictOrigin = !development
 
-	state = new(serverState)
-	state.pendingGameCondition = sync.NewCond(&sync.Mutex{})
+	state = new(ServerState)
 
 	port := os.Getenv("PORT")
 
@@ -60,7 +50,8 @@ func createServer() *http.Server {
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /join", withHeaders(new(joinHandler), restrictOrigin))
-	mux.Handle("GET /play", withHeaders(NewPlayHandler(), restrictOrigin))
+	mux.Handle("GET /hosted-game/new", withHeaders(CreateHostedGameNewHandler(&state.hostedGameState), restrictOrigin))
+	mux.Handle("GET /hosted-game/play", withHeaders(CreateHostedGamePlayHandler(&state.hostedGameState), restrictOrigin))
 
 	mux.Handle("/", http.FileServer(http.Dir("./static/")))
 
