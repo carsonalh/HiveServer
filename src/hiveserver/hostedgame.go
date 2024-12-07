@@ -4,6 +4,7 @@ import (
 	"HiveServer/src/hivegame"
 	"github.com/gorilla/websocket"
 	"sync"
+	"time"
 )
 
 type HostedGameState struct {
@@ -12,18 +13,25 @@ type HostedGameState struct {
 }
 
 type HostedGame struct {
-	whitePlayer uint64
-	whiteConn   *websocket.Conn
-	blackPlayer uint64
-	blackConn   *websocket.Conn
-	hiveGame    hivegame.HiveGame
-	condition   *sync.Cond
+	whitePlayer           uint64
+	whiteConn             *websocket.Conn
+	blackPlayer           uint64
+	blackConn             *websocket.Conn
+	whiteLastDisconnected *time.Time
+	blackLastDisconnected *time.Time
+	disconnectMutex       sync.Mutex
+	onDisconnect          chan hivegame.HiveColor
+	shutdown              chan struct{}
+	hiveGame              hivegame.HiveGame
+	condition             *sync.Cond
 }
 
 func NewHostedGame() *HostedGame {
 	return &HostedGame{
-		hiveGame:  hivegame.CreateHiveGame(),
-		condition: sync.NewCond(&sync.Mutex{}),
+		hiveGame:     hivegame.CreateHiveGame(),
+		condition:    sync.NewCond(&sync.Mutex{}),
+		onDisconnect: make(chan hivegame.HiveColor, 1),
+		shutdown:     make(chan struct{}, 1),
 	}
 }
 

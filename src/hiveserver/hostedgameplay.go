@@ -8,7 +8,10 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"time"
 )
+
+const DisconnectTimeout = 45 * time.Second
 
 type HostedGamePlayHandler struct {
 	upgrader websocket.Upgrader
@@ -22,7 +25,7 @@ func CreateHostedGamePlayHandler(hostedGameState *HostedGameState) *HostedGamePl
 }
 
 func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println("GET /hosted-game/play")
+	log.Printf("GET %s?%s\n", r.URL.Path, r.URL.RawQuery)
 
 	var conn *websocket.Conn
 	var err error
@@ -86,18 +89,26 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	var playerColor hivegame.HiveColor
+	var isReconnect = false
 
 	game.condition.L.Lock()
 
 	if game.blackPlayer != 0 && game.whitePlayer != 0 {
-		if playerId != game.blackPlayer && playerId != game.whitePlayer {
+		switch playerId {
+		case game.blackPlayer:
+			game.blackConn = conn
+			game.blackLastDisconnected = nil
+			isReconnect = true
+		case game.whitePlayer:
+			game.whiteConn = conn
+			game.whiteLastDisconnected = nil
+			isReconnect = true
+		default:
 			// player is trying to play a game that's not theirs
 			game.condition.L.Unlock()
 			_ = conn.Close()
 			return
 		}
-
-		// player is reconnecting to a disconnected game (or a token has been leaked)
 
 		goto unlock
 	}
@@ -132,6 +143,10 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	for game.blackPlayer == 0 || game.whitePlayer == 0 {
 		// we were the first to join and are waiting for our opponent to join
 		game.condition.Wait()
+
+		go game.WatchForDisconnect(func() {
+			h.state.OnGameCompleted(gameId)
+		})
 	}
 
 unlock:
@@ -144,40 +159,195 @@ unlock:
 		oppConn = game.blackConn
 	}
 
-	err = conn.WriteJSON(PlayMessage{
-		Event: EventConnect,
-		Connect: &GameConnect{
-			Color: playerColor,
-		},
-	})
-	if err != nil {
-		log.Println("Error writing json to websocket", err)
-		_ = conn.Close()
-		return
+	if isReconnect {
+		if oppConn != nil {
+			err = oppConn.WriteJSON(PlayMessage{
+				Event: EventReconnect,
+			})
+			if err != nil {
+				goto wsWriteError
+			}
+		}
+	} else {
+		err = conn.WriteJSON(PlayMessage{
+			Event: EventConnect,
+			Connect: &GameConnect{
+				Color: playerColor,
+			},
+		})
+		if err != nil {
+			goto wsWriteError
+		}
 	}
 
 	for {
 		err = conn.ReadJSON(&message)
 		if err != nil {
-			// player has disconnected, handle this somehow
+			// player has disconnected; or the server terminated the connection because
+			// the game is over
+
+			select {
+			case <-game.shutdown:
+				// only happens when the server ended the game because the opponent disconnected
+				return
+			default:
+				break
+			}
+
+			if over, _ := game.hiveGame.IsOver(); !over {
+				when := time.Now()
+				if playerColor == hivegame.ColorBlack {
+					game.blackConn = nil
+					game.blackLastDisconnected = &when
+				} else {
+					game.whiteConn = nil
+					game.whiteLastDisconnected = &when
+				}
+
+				game.onDisconnect <- playerColor
+
+				err = oppConn.WriteJSON(PlayMessage{
+					Event: EventDisconnect,
+				})
+				if err != nil {
+					goto wsWriteError
+				}
+			}
+
+			break
 		}
 
 		if message.Event == EventPlayMove {
-			_ = oppConn.WriteJSON(message)
+			err = oppConn.WriteJSON(message)
+			if err != nil {
+				goto wsWriteError
+			}
 
 			if !game.RecordMove(message.Move) {
 				// the move was illegal
-				_ = conn.WriteJSON(PlayMessage{
+				err = conn.WriteJSON(PlayMessage{
 					Event: EventRejectedMove,
 				})
+				if err != nil {
+					goto wsWriteError
+				}
 			} else if over, winner := game.hiveGame.IsOver(); over {
-				_ = conn.WriteJSON(PlayMessage{
+				err = conn.WriteJSON(PlayMessage{
 					Event: EventGameCompleted,
 					Complete: &GameComplete{
 						Won: winner == playerColor,
 					},
 				})
+				if err != nil {
+					goto wsWriteError
+				}
+
+				err = oppConn.WriteJSON(PlayMessage{
+					Event: EventGameCompleted,
+					Complete: &GameComplete{
+						Won: winner != playerColor,
+					},
+				})
+				if err != nil {
+					goto wsWriteError
+				}
+
+				_ = conn.Close()
+				_ = oppConn.Close()
+
+				h.state.OnGameCompleted(gameId)
+
+				break
 			}
 		}
 	}
+
+	return
+
+wsWriteError:
+	log.Println("Error writing to websocket", err)
+	_ = conn.Close()
+	return
+}
+
+func (hg *HostedGame) WatchForDisconnect(onGameComplete func()) {
+	for {
+		color := <-hg.onDisconnect
+
+		var whenDisconnected time.Time
+
+		hg.disconnectMutex.Lock()
+		if color == hivegame.ColorBlack {
+			whenDisconnected = *hg.blackLastDisconnected
+		} else {
+			whenDisconnected = *hg.whiteLastDisconnected
+		}
+		hg.disconnectMutex.Unlock()
+
+		toWait := DisconnectTimeout - time.Now().Sub(whenDisconnected)
+
+		if toWait < 0 {
+			continue
+		}
+
+		var reconnectFailed bool
+
+		<-time.After(toWait)
+		hg.disconnectMutex.Lock()
+		var lastDisconnected *time.Time
+		if color == hivegame.ColorBlack {
+			lastDisconnected = hg.blackLastDisconnected
+		} else {
+			lastDisconnected = hg.whiteLastDisconnected
+		}
+
+		if lastDisconnected != nil {
+			// player of color 'color' should lose because they disconnected
+			reconnectFailed = true
+		}
+		hg.disconnectMutex.Unlock()
+
+		if reconnectFailed {
+			hg.condition.L.Lock()
+			var err error
+			if color == hivegame.ColorBlack && hg.whiteConn != nil {
+				err = hg.whiteConn.WriteJSON(PlayMessage{
+					Event: EventGameCompleted,
+					Complete: &GameComplete{
+						Won: true,
+					},
+				})
+				hg.shutdown <- struct{}{}
+				_ = hg.whiteConn.Close()
+				onGameComplete()
+			} else if color == hivegame.ColorWhite && hg.blackConn != nil {
+				err = hg.blackConn.WriteJSON(PlayMessage{
+					Event: EventGameCompleted,
+					Complete: &GameComplete{
+						Won: true,
+					},
+				})
+				hg.shutdown <- struct{}{}
+				_ = hg.blackConn.Close()
+				onGameComplete()
+			}
+
+			if err != nil {
+				log.Println("Error writing to websocket after disconnect", err)
+			}
+
+			hg.condition.L.Unlock()
+
+			return
+		}
+	}
+}
+
+func (state *HostedGameState) OnGameCompleted(id string) {
+	if _, ok := state.games.Load(id); !ok {
+		log.Printf("OnGameCompleted() called with id %s and cannot be found in the map of current games", id)
+		return
+	}
+
+	state.games.Delete(id)
 }

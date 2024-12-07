@@ -1,6 +1,8 @@
 package main
 
-import "HiveServer/src/hivegame"
+import (
+	"HiveServer/src/hivegame"
+)
 
 const (
 	EventAuthenticate = "AUTHENTICATE"
