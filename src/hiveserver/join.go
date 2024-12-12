@@ -21,7 +21,7 @@ func (h *joinHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	response := joinResponse{}
 	playerId := h.previousPlayerId.Add(1)
 
-	log.Printf("GET /new-game, created player id = %d\n", playerId)
+	log.Printf("GET /join, created player id = %d\n", playerId)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"id": playerId})
 	secretString := os.Getenv("JWT_SECRET")

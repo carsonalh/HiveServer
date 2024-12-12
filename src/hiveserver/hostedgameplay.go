@@ -125,6 +125,11 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 			playerColor = hivegame.ColorWhite
 		}
 	} else if game.blackPlayer == 0 {
+		if game.whitePlayer == playerId {
+			// rejoining before the other player has joined
+			goto waitForOpponentJoin
+		}
+
 		// other player already joined as white
 		game.blackPlayer = playerId
 		game.blackConn = conn
@@ -132,6 +137,11 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		game.condition.Signal()
 		goto unlock
 	} else if game.whitePlayer == 0 {
+		if game.blackPlayer == playerId {
+			// rejoining before the other player has joined
+			goto waitForOpponentJoin
+		}
+
 		// other player already joined as black
 		game.whitePlayer = playerId
 		game.whiteConn = conn
@@ -140,6 +150,7 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		goto unlock
 	}
 
+waitForOpponentJoin:
 	for game.blackPlayer == 0 || game.whitePlayer == 0 {
 		// we were the first to join and are waiting for our opponent to join
 		game.condition.Wait()
@@ -218,7 +229,10 @@ unlock:
 		}
 
 		if message.Event == EventPlayMove {
-			err = oppConn.WriteJSON(message)
+			err = oppConn.WriteJSON(PlayMessage{
+				Event: EventPlayMove,
+				Move:  message.Move,
+			})
 			if err != nil {
 				goto wsWriteError
 			}
