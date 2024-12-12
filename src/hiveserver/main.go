@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/joho/godotenv"
 	"log"
 	"net/http"
@@ -15,29 +16,29 @@ type ServerState struct {
 
 var state *ServerState
 
-func withHeaders(next http.Handler, restrictOrigin bool) http.Handler {
+func withHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if restrictOrigin {
-			w.Header().Set("Access-Control-Allow-Origin", "https://hivegame.io")
-		} else {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		}
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		next.ServeHTTP(w, r)
 	})
 }
 
 func createServer() *http.Server {
 	var useTls bool
-	var restrictOrigin bool
-
 	var development bool
 
 	flag.BoolVar(&development, "development", false, "Set to run in development mode")
 	flag.Parse()
 
 	useTls = !development
-	restrictOrigin = !development
+
+	if os.Getenv("CORS_ORIGIN") == "" {
+		panic("Cannot start the server without the CORS_ORIGIN environment variable")
+	} else {
+		fmt.Printf("Using origin %s\n", os.Getenv("CORS_ORIGIN"))
+	}
 
 	state = new(ServerState)
 
@@ -49,9 +50,15 @@ func createServer() *http.Server {
 
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /join", withHeaders(new(joinHandler), restrictOrigin))
-	mux.Handle("GET /hosted-game/new", withHeaders(CreateHostedGameNewHandler(&state.hostedGameState), restrictOrigin))
-	mux.Handle("GET /hosted-game/play", withHeaders(CreateHostedGamePlayHandler(&state.hostedGameState), restrictOrigin))
+	mux.Handle("GET /join", withHeaders(new(joinHandler)))
+	mux.Handle("GET /hosted-game/new", withHeaders(CreateHostedGameNewHandler(&state.hostedGameState)))
+	mux.Handle("GET /hosted-game/play", withHeaders(CreateHostedGamePlayHandler(&state.hostedGameState)))
+	mux.HandleFunc("OPTIONS /hosted-game/new", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("OPTIONS %s", r.URL.Path)
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization")
+	})
 
 	mux.Handle("/", http.FileServer(http.Dir("./static/")))
 

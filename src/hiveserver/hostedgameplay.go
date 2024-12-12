@@ -30,10 +30,10 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	var conn *websocket.Conn
 	var err error
 
+	h.upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	conn, err = h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Error upgrading connection to websocket", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
