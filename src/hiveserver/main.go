@@ -60,7 +60,7 @@ func createServer() *http.Server {
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization")
 	})
 
-	mux.Handle("/", http.FileServer(http.Dir("./static/")))
+	mux.Handle("/", http.FileServer(SpaFileServer(http.Dir("./static/"))))
 
 	server := &http.Server{
 		Addr:    ":" + port,
