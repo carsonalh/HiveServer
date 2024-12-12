@@ -693,10 +693,25 @@ func TestPinQueenAndSurround(t *testing.T) {
 	}
 
 	expectLegal(game.PlaceTile(HexVectorInt{1, -1}, PieceTypeGrasshopper))
+	if game.ColorToMove != ColorBlack {
+		t.Error("Expected ColorToMove to be black")
+	}
 	expectLegal(game.PlaceTile(HexVectorInt{-1, -1}, PieceTypeGrasshopper))
+	if game.ColorToMove != ColorBlack {
+		t.Error("Expected ColorToMove to be black")
+	}
 	expectLegal(game.PlaceTile(HexVectorInt{-1, 0}, PieceTypeGrasshopper))
+	if game.ColorToMove != ColorBlack {
+		t.Error("Expected ColorToMove to be black")
+	}
 	expectLegal(game.PlaceTile(HexVectorInt{0, -2}, PieceTypeSoldierAnt))
+	if game.ColorToMove != ColorBlack {
+		t.Error("Expected ColorToMove to be black")
+	}
 	expectLegal(game.PlaceTile(HexVectorInt{1, -2}, PieceTypeSoldierAnt))
+	if game.ColorToMove != ColorBlack {
+		t.Error("Expected ColorToMove to be black")
+	}
 
 	if over, winner := game.IsOver(); !over {
 		t.Fatalf("Game with surrounded queen must be over")
