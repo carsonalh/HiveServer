@@ -3,20 +3,20 @@ package hivegame
 type HiveColor = int
 
 const (
-	ColorBlack HiveColor = iota
-	ColorWhite
+	ColorBlack = 0
+	ColorWhite = 1
 )
 
 type HivePieceType = int
 
 const (
-	PieceTypeQueenBee HivePieceType = iota
-	PieceTypeSoldierAnt
-	PieceTypeGrasshopper
-	PieceTypeSpider
-	PieceTypeBeetle
-	PieceTypeLadybug
-	PieceTypeMosquito
+	PieceTypeQueenBee    HivePieceType = 0
+	PieceTypeSoldierAnt                = 1
+	PieceTypeGrasshopper               = 2
+	PieceTypeSpider                    = 3
+	PieceTypeBeetle                    = 4
+	PieceTypeLadybug                   = 5
+	PieceTypeMosquito                  = 6
 )
 
 type HiveTile struct {
