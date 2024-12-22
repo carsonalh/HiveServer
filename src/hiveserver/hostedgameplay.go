@@ -27,6 +27,27 @@ func CreateHostedGamePlayHandler(hostedGameState *HostedGameState) *HostedGamePl
 func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("GET %s?%s\n", r.URL.Path, r.URL.RawQuery)
 
+	var gameId string
+	var got any
+	var game *HostedGame
+	var ok bool
+
+	gameId = r.URL.Query().Get("id")
+	h.state.games.Load(gameId)
+
+	got, ok = h.state.games.Load(gameId)
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	game, ok = got.(*HostedGame)
+	if !ok {
+		log.Println("500 Could not cast games map value to *HostedGame")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	var conn *websocket.Conn
 	var err error
 
@@ -69,24 +90,6 @@ func (h *HostedGamePlayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 
 	playerId := uint64(token.Claims.(jwt.MapClaims)["id"].(float64))
-	gameId := r.URL.Query().Get("id")
-
-	var got any
-	var game *HostedGame
-	var ok bool
-
-	got, ok = h.state.games.Load(gameId)
-	if !ok {
-		_ = conn.Close()
-		return
-	}
-
-	game, ok = got.(*HostedGame)
-	if !ok {
-		log.Println("500 Could not cast games map value to *HostedGame")
-		_ = conn.Close()
-		return
-	}
 
 	var playerColor hivegame.HiveColor
 	var isReconnect = false
