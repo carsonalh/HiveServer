@@ -37,7 +37,7 @@ func createServer() *http.Server {
 	if os.Getenv("CORS_ORIGIN") == "" {
 		panic("Cannot start the server without the CORS_ORIGIN environment variable")
 	} else {
-		fmt.Printf("Using origin %s\n", os.Getenv("CORS_ORIGIN"))
+		fmt.Printf("Using CORS origin %s\n", os.Getenv("CORS_ORIGIN"))
 	}
 
 	state = new(ServerState)
