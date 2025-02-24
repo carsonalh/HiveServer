@@ -315,14 +315,26 @@ func (game *HiveGame) skipIfNoLegalMoves() {
 		}
 	}
 
-	if legalMovements || len(game.legalPlacements()) > 0 {
+	if legalMovements || len(game.LegalPlacements()) > 0 {
 		return
 	}
 	game.incrementMove()
 }
 
-func (game *HiveGame) legalPlacements() map[HexVectorInt]bool {
+func (game *HiveGame) LegalPlacements() map[HexVectorInt]bool {
 	perimeter := make([]HexVectorInt, 0)
+
+	if game.Move == 1 && game.ColorToMove == ColorBlack {
+		// The player can play anywhere, but a stupid question (someone calling this function for a
+		// new game) warrants a stupid answer (this return value)
+		return map[HexVectorInt]bool{}
+	} else if game.Move == 1 {
+		moves := map[HexVectorInt]bool{}
+		for _, p := range game.Tiles[0].Position.AdjacentVectors() {
+			moves[p] = true
+		}
+		return moves
+	}
 
 	for _, tile := range game.Tiles {
 		if tile.Color == game.ColorToMove {

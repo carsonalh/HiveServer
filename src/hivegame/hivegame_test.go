@@ -719,3 +719,36 @@ func TestPinQueenAndSurround(t *testing.T) {
 		t.Fatalf("Black must be the winner of a game wherein white's queen is surrounded")
 	}
 }
+
+func TestGetLegalPlacementsBasic(t *testing.T) {
+	game := CreateHiveGame()
+	game.PlaceTile(HexVectorInt{0, 0}, PieceTypeQueenBee)
+
+	placementsMap := game.LegalPlacements()
+
+	placements := make([]HexVectorInt, 0, 6)
+	for pos := range placementsMap {
+		placements = append(placements, pos)
+	}
+
+	if len(placements) != 6 {
+		t.Errorf("Expected 6 legal placements but got %d", len(placements))
+	}
+
+	expectedPlacements := HexVectorInt{0, 0}.AdjacentVectors()
+
+	for _, p := range expectedPlacements {
+		found := false
+
+		for _, q := range placements {
+			if p == q {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			t.Errorf("Expected to find move %v but did not", p)
+		}
+	}
+}

@@ -361,6 +361,30 @@ func legalMoves(_ js.Value, args []js.Value) interface{} {
 	return jsMoves
 }
 
+func legalPlacements(_ js.Value, args []js.Value) interface{} {
+	if len(args) != 1 {
+		panic("legalPlacements function expects 1 argument : game")
+	}
+
+	game, err := JsValueToHiveGame(args[0])
+
+	if err != nil {
+		panic(err)
+	}
+
+	positions := game.LegalPlacements()
+	jsPositions := make([]interface{}, 0)
+
+	for position := range positions {
+		jsPositions = append(jsPositions, interface{}(map[string]interface{}{
+			"q": position.Q,
+			"r": position.R,
+		}))
+	}
+
+	return js.ValueOf(jsPositions)
+}
+
 func tiles(_ js.Value, args []js.Value) interface{} {
 	if len(args) != 1 {
 		panic("tiles function expects 1 argument : game")
@@ -540,6 +564,7 @@ func main() {
 	hiveModule.Set("placeTile", js.FuncOf(placeTile))
 	hiveModule.Set("moveTile", js.FuncOf(moveTile))
 	hiveModule.Set("legalMoves", js.FuncOf(legalMoves))
+	hiveModule.Set("legalPlacements", js.FuncOf(legalPlacements))
 	hiveModule.Set("tiles", js.FuncOf(tiles))
 	hiveModule.Set("colorToMove", js.FuncOf(colorToMove))
 	hiveModule.Set("idOfLastPlaced", js.FuncOf(idOfLastPlaced))
